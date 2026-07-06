@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Wochenboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #12142b;
+    --card: #1c2044;
+    --card-hi: #23274f;
+    --text: #eef0fb;
+    --text-dim: #9498c0;
+    --blue: #5b8def;
+    --pink: #ec4899;
+    --amber: #f5a623;
+    --teal: #22d3b6;
+    --purple: #a78bfa;
+    --line: rgba(255,255,255,0.07);
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background:
+      radial-gradient(ellipse at top left, rgba(91,141,239,0.12), transparent 55%),
+      radial-gradient(ellipse at bottom right, rgba(236,72,153,0.10), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    overflow-x:hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Header */
+  .header{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:22px 26px 14px; gap:14px;
+  }
+  .header-actions{ display:flex; gap:10px; align-items:center; }
+  .clock{
+    color:var(--text-dim); font-size:14px; font-weight:500;
+    background:var(--card); padding:9px 18px; border-radius:22px; border:1px solid var(--line);
+    cursor:pointer;
+  }
+  .clock:hover{ border-color:var(--blue); }
+
+  /* Wetter-Kachel */
+  .weather-tile{
+    display:flex; align-items:center; gap:12px; cursor:pointer;
+    background:var(--card); border:1px solid var(--line); border-radius:16px; padding:10px 16px;
+  }
+  .weather-tile:hover{ border-color:var(--blue); }
+  .weather-temp-big{ font-size:30px; font-weight:800; color:var(--blue); }
+  .weather-desc{ font-size:14px; color:var(--text-dim); font-weight:500; }
+  .weather-meta{ font-size:12px; color:var(--text-dim); margin-left:auto; text-align:right; line-height:1.5; }
+
+  /* Zentraler Plus-Button */
+  .add-fab{
+    width:44px; height:44px; border-radius:50%; background:var(--blue); color:#0d0f22;
+    border:none; font-size:22px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 4px 14px rgba(91,141,239,0.35); flex-shrink:0;
+  }
+  .add-fab:hover{ filter:brightness(1.08); }
+
+  /* Layout */
+  .layout{ padding:8px 24px 28px; }
+  .card{
+    position:relative;
+    background: var(--card);
+    border:1px solid var(--line);
+    border-radius:20px;
+    padding:20px 22px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  }
+
+  /* Wochenboard */
+  .board-grid{
+    display:grid; grid-template-columns:repeat(7,1fr); gap:10px;
+  }
+  @media (max-width: 720px){
+    .board-grid{ grid-template-columns:repeat(2,1fr); }
+  }
+  .day-col{
+    background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:10px;
+    display:flex; flex-direction:column; gap:6px; min-height:140px;
+  }
+  .day-col.today{ border-color:var(--blue); box-shadow:0 0 0 1px var(--blue) inset; }
+  .day-col.dragover{ border-color:var(--pink); background:var(--card-hi); }
+  .day-header{
+    text-align:center; font-size:12.5px; font-weight:700; color:var(--text-dim);
+    text-transform:uppercase; letter-spacing:0.05em; padding-bottom:8px; border-bottom:1px solid var(--line); margin-bottom:2px;
+  }
+  .day-header.today{ color:var(--blue); }
+  .list-item{
+    background:var(--card-hi); border-radius:10px; padding:8px 10px 8px 9px; position:relative;
+    font-size:13.5px; line-height:1.4; border-left:3px solid var(--blue); cursor:grab;
+  }
+  .list-item.dragging{ opacity:0.4; }
+  .list-item .del{ position:absolute; top:5px; right:7px; color:var(--text-dim); font-size:13px; cursor:pointer; padding:3px; }
+  .recur-icon{ font-size:10px; margin-right:3px; opacity:0.85; }
+  .item-time{ font-weight:700; color:var(--text-dim); font-size:10.5px; margin-right:5px; }
+
+  /* Overlay/Modal */
+  .overlay{ position:fixed; inset:0; background:rgba(10,11,25,0.75); backdrop-filter: blur(3px);
+    display:none; align-items:center; justify-content:center; z-index:50; padding:20px;}
+  .overlay.open{ display:flex; }
+  .modal{ background:var(--card); border:1px solid var(--line); border-radius:20px; max-width:520px; width:100%;
+    max-height:85vh; overflow-y:auto; padding:24px 26px; position:relative; box-shadow:0 20px 60px rgba(0,0,0,0.4); }
+  .modal h2{ font-size:19px; font-weight:800; margin:0; }
+  .close-btn{ position:absolute; top:16px; right:18px; background:var(--bg); border:1px solid var(--line);
+    color:var(--text-dim); font-size:16px; cursor:pointer; width:32px; height:32px; border-radius:50%; }
+  .close-btn:hover{ color:var(--text); border-color:var(--pink); }
+
+  /* Wetter-Modal */
+  .hourly-row{ display:flex; gap:14px; overflow-x:auto; padding:14px 0 6px; }
+  .hourly-item{ flex:0 0 auto; text-align:center; font-size:12.5px; color:var(--text-dim); }
+  .hourly-item .h-time{ font-weight:600; margin-bottom:4px; }
+  .hourly-item .h-temp{ font-weight:800; font-size:15px; color:var(--text); margin-top:4px; }
+  .daily-row{ display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px;}
+  .daily-row:last-child{ border-bottom:none; }
+  .daily-name{ font-weight:700; width:44px; }
+  .daily-bar{ flex:1; margin:0 12px; height:4px; background:var(--line); border-radius:2px; position:relative; align-self:center;}
+  .daily-bar-fill{ position:absolute; height:100%; border-radius:2px; background:var(--amber); }
+  .daily-range{ font-weight:600; width:80px; text-align:right; }
+
+  /* Monatskalender */
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-top:14px; }
+  .cal-weekday{ font-size:11.5px; font-weight:700; color:var(--text-dim); text-align:center; padding-bottom:6px; }
+  .cal-day{ aspect-ratio:1; display:flex; align-items:center; justify-content:center; border-radius:10px;
+    font-size:14px; font-weight:600; color:var(--text); background:var(--bg); }
+  .cal-day.other-month{ color:var(--text-dim); opacity:0.35; }
+  .cal-day.today{ background:var(--blue); color:#0d0f22; }
+
+  /* Add-Modal Felder */
+  .modal-field{ margin-bottom:16px; margin-top:16px; }
+  .modal-field label{ display:block; font-size:12px; font-weight:700; color:var(--text-dim); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em; }
+  .modal-input{
+    width:100%; font-size:14.5px; padding:11px 12px; background:var(--bg); color:var(--text);
+    border:1px solid var(--line); border-radius:10px; font-family:'Inter', sans-serif;
+  }
+  .modal-input:focus{ outline:none; border-color:var(--blue); }
+  .day-chip-picker{ display:flex; gap:6px; flex-wrap:wrap; }
+  .day-chip{
+    font-size:12.5px; font-weight:700; padding:8px 13px; border-radius:9px; cursor:pointer;
+    color:var(--text-dim); background:var(--bg); border:1.5px solid var(--line);
+  }
+  .day-chip.selected{ background:var(--blue); color:#0d0f22; border-color:var(--blue); }
+  .cat-picker{ display:flex; gap:6px; flex-wrap:wrap; }
+  .cat-chip{
+    font-size:12px; font-weight:700; padding:7px 12px; border-radius:9px; cursor:pointer;
+    color:var(--text-dim); background:var(--bg); border:1.5px solid transparent; white-space:nowrap;
+  }
+  .cat-chip.selected{ color:#0d0f22; }
+  .recur-toggle{ display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--text); cursor:pointer; }
+  .recur-toggle input{ width:18px; height:18px; accent-color:var(--blue); }
+  .modal-submit{
+    background:var(--blue); color:#0d0f22; border:none; border-radius:10px; padding:12px 20px;
+    cursor:pointer; font-size:15px; font-weight:700; width:100%; margin-top:6px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="weather-tile" id="weather_tile" onclick="openWeatherView()">
+    <span class="weather-temp-big" id="weather_temp_big">--°</span>
+    <span class="weather-desc" id="weather_desc_small">Lädt…</span>
+    <span class="weather-meta" id="weather_meta_small"></span>
+  </div>
+  <button class="add-fab" onclick="openAddModal()">+</button>
+  <div class="header-actions">
+    <div class="clock" id="clock" onclick="openMonthView()">--:--</div>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="card">
+    <div class="board-grid" id="board_grid"></div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal" id="modalBody"></div>
+</div>
+
+<script>
+/* ================= Grunddaten ================= */
+const DAYS = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+const DAY_FULL = ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"];
+const STORAGE_KEY = "wochenboard_data";
+const CATEGORIES = [
+  {key:'pause', label:'Pause', color:'teal'},
+  {key:'haushalt', label:'Haushalt', color:'blue'},
+  {key:'garten', label:'Garten', color:'amber'},
+  {key:'theo', label:'Theo', color:'pink'},
+  {key:'termine', label:'Termine', color:'purple'}
+];
+function catByKey(key){ return CATEGORIES.find(c=>c.key===key) || null; }
+function dowIndex(){
+  const j = new Date().getDay();
+  return j === 0 ? 6 : j-1;
+}
+
+/* ================= Speicher (localStorage) ================= */
+function getBoard(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ console.error(e); }
+  const fresh = {}; DAYS.forEach(d=>fresh[d]=[]);
+  return fresh;
+}
+function saveBoard(board){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(board)); }
+  catch(e){ console.error(e); }
+}
+
+/* ================= Uhr ================= */
+function tickClock(){
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleDateString('de-DE',{weekday:'long', day:'2-digit', month:'2-digit'}) + " · " +
+    now.toLocaleTimeString('de-DE',{hour:'2-digit', minute:'2-digit'});
+}
+setInterval(tickClock, 15000); tickClock();
+
+/* ================= Modal Helfer ================= */
+function openModal(html){
+  document.getElementById('modalBody').innerHTML = `<button class="close-btn" onclick="closeModal()">✕</button>` + html;
+  document.getElementById('overlay').classList.add('open');
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeModal(); });
+
+/* ================= Monatsansicht ================= */
+function openMonthView(){
+  const now = new Date();
+  renderMonth(now.getFullYear(), now.getMonth());
+}
+function renderMonth(year, month){
+  const first = new Date(year, month, 1);
+  const startOffset = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+  const todayStr = new Date().toDateString();
+  const monthNames = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+
+  let cells = '';
+  for(let i=startOffset; i>0; i--){
+    cells += `<div class="cal-day other-month">${daysInPrevMonth - i + 1}</div>`;
+  }
+  for(let d=1; d<=daysInMonth; d++){
+    const cellDate = new Date(year, month, d);
+    const isToday = cellDate.toDateString() === todayStr;
+    cells += `<div class="cal-day ${isToday?'today':''}">${d}</div>`;
+  }
+  const totalCells = startOffset + daysInMonth;
+  const remainder = (7 - (totalCells % 7)) % 7;
+  for(let d=1; d<=remainder; d++){
+    cells += `<div class="cal-day other-month">${d}</div>`;
+  }
+  const weekdayLabels = DAYS.map(w=>`<div class="cal-weekday">${w}</div>`).join('');
+
+  openModal(`
+    <h2>${monthNames[month]} ${year}</h2>
+    <p style="color:var(--text-dim); font-size:13px; margin:6px 0 0;">Reine Übersicht.</p>
+    <div class="cal-grid">${weekdayLabels}${cells}</div>
+  `);
+}
+
+/* ================= Wetter ================= */
+const HAREN_LAT = 52.7925, HAREN_LON = 7.2439;
+let weatherData = null;
+function weatherDesc(code){
+  const map = {0:"Klar",1:"Meist klar",2:"Teilw. bewölkt",3:"Stark bewölkt",45:"Nebel",48:"Nebel",
+    51:"Nieselregen",61:"Regen",63:"Regen",65:"Starker Regen",71:"Schnee",73:"Schnee",
+    80:"Schauer",81:"Schauer",95:"Gewitter"};
+  return map[code] || "—";
+}
+function windArrow(deg){
+  const arrows = ['↓','↙','←','↖','↑','↗','→','↘'];
+  return arrows[Math.round(deg / 45) % 8];
+}
+async function loadWeather(){
+  try{
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${HAREN_LAT}&longitude=${HAREN_LON}&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,wind_direction_10m,precipitation_probability&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,weather_code,sunset&minutely_15=precipitation&timezone=Europe%2FBerlin`);
+    weatherData = await r.json();
+    renderWeatherTile();
+  }catch(e){
+    document.getElementById('weather_desc_small').textContent = "Nicht verfügbar";
+  }
+}
+function renderWeatherTile(){
+  if(!weatherData) return;
+  const temp = Math.round(weatherData.current.temperature_2m);
+  const desc = weatherDesc(weatherData.current.weather_code);
+  document.getElementById('weather_temp_big').textContent = `${temp}°`;
+  document.getElementById('weather_desc_small').textContent = desc;
+  document.getElementById('weather_meta_small').innerHTML =
+    `${windArrow(weatherData.current.wind_direction_10m)} Wind ${Math.round(weatherData.current.wind_speed_10m)} km/h<br>💧 ${weatherData.current.precipitation_probability}% Regen`;
+}
+function weatherIcon(code){
+  if(code === 0 || code === 1) return '☀️';
+  if(code === 2) return '⛅';
+  if(code === 3) return '☁️';
+  if(code === 45 || code === 48) return '🌫️';
+  if([51,61,63,80,81].includes(code)) return '🌧️';
+  if(code === 65) return '🌧️';
+  if([71,73].includes(code)) return '❄️';
+  if(code === 95) return '⛈️';
+  return '🌡️';
+}
+function openWeatherView(){
+  if(!weatherData){ loadWeather(); return; }
+  const now = new Date();
+  const nowIso = now.toISOString().slice(0,13);
+  let startIdx = weatherData.hourly.time.findIndex(t => t.startsWith(nowIso));
+  if(startIdx < 0) startIdx = 0;
+  const hourly = weatherData.hourly.time.slice(startIdx, startIdx+8).map((t,i)=>{
+    const idx = startIdx + i;
+    const hour = new Date(t).toLocaleTimeString('de-DE',{hour:'2-digit'});
+    const temp = Math.round(weatherData.hourly.temperature_2m[idx]);
+    const pop = weatherData.hourly.precipitation_probability[idx];
+    return `<div class="hourly-item"><div class="h-time">${hour}</div>${weatherIcon(weatherData.hourly.weather_code[idx])}<div class="h-temp">${temp}°</div><div style="font-size:11px;color:var(--blue);margin-top:2px;">💧${pop}%</div></div>`;
+  }).join('');
+
+  const allTemps = weatherData.daily.temperature_2m_max.concat(weatherData.daily.temperature_2m_min);
+  const globalMax = Math.max(...allTemps), globalMin = Math.min(...allTemps);
+  const daily = weatherData.daily.time.slice(0,7).map((t,i)=>{
+    const dayName = new Date(t).toLocaleDateString('de-DE',{weekday:'short'});
+    const tmax = Math.round(weatherData.daily.temperature_2m_max[i]);
+    const tmin = Math.round(weatherData.daily.temperature_2m_min[i]);
+    const leftPct = ((tmin - globalMin) / (globalMax - globalMin)) * 100;
+    const widthPct = ((tmax - tmin) / (globalMax - globalMin)) * 100;
+    return `
+      <div class="daily-row">
+        <span class="daily-name">${dayName}</span>
+        ${weatherIcon(weatherData.daily.weather_code[i])}
+        <div class="daily-bar"><div class="daily-bar-fill" style="left:${leftPct}%; width:${widthPct}%;"></div></div>
+        <span class="daily-range">${tmax}° / ${tmin}°</span>
+      </div>
+    `;
+  }).join('');
+
+  const sunsetToday = weatherData.daily.sunset[0];
+  const sunsetTime = new Date(sunsetToday).toLocaleTimeString('de-DE',{hour:'2-digit', minute:'2-digit'});
+
+  const nowMs = now.getTime();
+  let minStartIdx = weatherData.minutely_15.time.findIndex(t => new Date(t).getTime() >= nowMs);
+  if(minStartIdx < 0) minStartIdx = 0;
+  const minutelySlice = weatherData.minutely_15.precipitation.slice(minStartIdx, minStartIdx+8);
+  const maxPrecip = Math.max(...minutelySlice, 0.5);
+  const anyRainSoon = minutelySlice.some(v => v > 0);
+  const minutelyBars = weatherData.minutely_15.time.slice(minStartIdx, minStartIdx+8).map((t,i)=>{
+    const val = weatherData.minutely_15.precipitation[minStartIdx+i];
+    const heightPct = Math.max(4, (val / maxPrecip) * 100);
+    const label = new Date(t).toLocaleTimeString('de-DE',{hour:'2-digit', minute:'2-digit'});
+    return `<div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
+      <div style="width:60%; height:34px; display:flex; align-items:flex-end;">
+        <div style="width:100%; height:${heightPct}%; background:var(--blue); border-radius:3px 3px 0 0; opacity:${val>0?1:0.25};"></div>
+      </div>
+      <span style="font-size:10px; color:var(--text-dim);">${label}</span>
+    </div>`;
+  }).join('');
+
+  openModal(`
+    <h2>${Math.round(weatherData.current.temperature_2m)}° · Haren (Ems)</h2>
+    <p style="color:var(--text-dim); font-size:13px; margin:6px 0 0;">
+      ${weatherDesc(weatherData.current.weather_code)} · 💧 ${weatherData.current.precipitation_probability}% · ${windArrow(weatherData.current.wind_direction_10m)} ${Math.round(weatherData.current.wind_speed_10m)} km/h · 🌇 Untergang ${sunsetTime}
+    </p>
+    <div style="font-size:12.5px; color:var(--text-dim); font-weight:700; text-transform:uppercase; letter-spacing:0.04em; margin-top:16px;">
+      ${anyRainSoon ? 'Regen in den nächsten 2 Stunden' : 'Kein Regen in den nächsten 2 Stunden'}
+    </div>
+    <div style="display:flex; gap:4px; margin-top:10px;">${minutelyBars}</div>
+    <div class="hourly-row">${hourly}</div>
+    <div style="margin-top:10px;">${daily}</div>
+  `);
+}
+loadWeather();
+setInterval(loadWeather, 15 * 60 * 1000);
+
+/* ================= Wochenboard ================= */
+let dragSrc = null;
+
+function renderBoard(){
+  const board = getBoard();
+  const todayIdx = dowIndex();
+
+  const html = DAYS.map((day, i) => {
+    const rawItems = board[day] || [];
+    const items = rawItems.map((it, origIdx) => {
+      const obj = (typeof it === 'string') ? {text: it} : it;
+      return Object.assign({}, obj, {origIdx});
+    });
+    const withTime = items.filter(it => it.time).sort((a,b) => a.time.localeCompare(b.time));
+    const withoutTime = items.filter(it => !it.time);
+    const ordered = withTime.concat(withoutTime);
+
+    const itemsHtml = ordered.map(obj => renderItemHtml(obj, day)).join('');
+
+    return `
+      <div class="day-col ${i === todayIdx ? 'today' : ''}" data-day="${day}"
+        ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <div class="day-header ${i === todayIdx ? 'today' : ''}">${DAY_FULL[i].slice(0,2)}</div>
+        ${itemsHtml}
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('board_grid').innerHTML = html;
+}
+
+function renderItemHtml(obj, day){
+  const cat = catByKey(obj.category);
+  const borderColor = cat ? `var(--${cat.color})` : 'var(--blue)';
+  const timeLabel = obj.time ? `<span class="item-time">${obj.time}</span>` : '';
+  const recurLabel = obj.recurring ? `<span class="recur-icon">🔁</span>` : '';
+  return `
+    <div class="list-item" style="border-left-color:${borderColor}" draggable="true"
+      data-day="${day}" data-idx="${obj.origIdx}"
+      ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">
+      ${recurLabel}${timeLabel}${escapeHtml(obj.text)}<span class="del" onclick="deleteBoardItem('${day}', ${obj.origIdx})">✕</span>
+    </div>
+  `;
+}
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function onDragStart(e){
+  dragSrc = { day: e.currentTarget.dataset.day, idx: parseInt(e.currentTarget.dataset.idx, 10) };
+  e.currentTarget.classList.add('dragging');
+}
+function onDragEnd(e){ e.currentTarget.classList.remove('dragging'); }
+function onDragOver(e){ e.preventDefault(); e.currentTarget.classList.add('dragover'); }
+function onDragLeave(e){ e.currentTarget.classList.remove('dragover'); }
+function onDrop(e){
+  e.preventDefault();
+  e.currentTarget.classList.remove('dragover');
+  const targetDay = e.currentTarget.dataset.day;
+  if(!dragSrc) return;
+  const board = getBoard();
+  const [moved] = board[dragSrc.day].splice(dragSrc.idx, 1);
+  board[targetDay].push(moved);
+  saveBoard(board);
+  dragSrc = null;
+  renderBoard();
+}
+function deleteBoardItem(day, idx){
+  const board = getBoard();
+  board[day].splice(idx, 1);
+  saveBoard(board);
+  renderBoard();
+}
+
+/* ================= Zentrales Add-Modal ================= */
+let modalSelectedDays = [];
+let modalSelectedCategory = CATEGORIES[0].key;
+
+function openAddModal(){
+  modalSelectedDays = [DAYS[dowIndex()]];
+  modalSelectedCategory = CATEGORIES[0].key;
+
+  const dayChips = DAYS.map(d => `
+    <div class="day-chip ${modalSelectedDays.includes(d) ? 'selected' : ''}" data-day="${d}" onclick="toggleModalDay('${d}', this)">${d}</div>
+  `).join('');
+  const catChips = CATEGORIES.map((c, ci) => `
+    <div class="cat-chip ${ci === 0 ? 'selected' : ''}"
+      style="${ci === 0 ? `background:var(--${c.color});color:#0d0f22;` : `color:var(--${c.color});`} border-color:var(--${c.color});"
+      data-key="${c.key}" onclick="pickModalCategory('${c.key}', this)">${c.label}</div>
+  `).join('');
+
+  openModal(`
+    <h2>Neuer Eintrag</h2>
+    <div class="modal-field">
+      <label>Was steht an?</label>
+      <input type="text" class="modal-input" id="modal_text" placeholder="z.B. Pflanzen gießen">
+    </div>
+    <div class="modal-field">
+      <label>Tag(e) – mehrere möglich</label>
+      <div class="day-chip-picker" id="modal_day_picker">${dayChips}</div>
+    </div>
+    <div class="modal-field">
+      <label>Uhrzeit (optional)</label>
+      <input type="time" class="modal-input" id="modal_time">
+    </div>
+    <div class="modal-field">
+      <label>Kategorie</label>
+      <div class="cat-picker" id="modal_cat_picker">${catChips}</div>
+    </div>
+    <div class="modal-field">
+      <label class="recur-toggle"><input type="checkbox" id="modal_recurring"> Wiederkehrend (nur Symbol, ändert das Verhalten aktuell nicht)</label>
+    </div>
+    <button class="modal-submit" onclick="submitAddModal()">Hinzufügen</button>
+  `);
+  setTimeout(() => { const el = document.getElementById('modal_text'); if(el) el.focus(); }, 50);
+}
+function toggleModalDay(day, el){
+  if(modalSelectedDays.includes(day)){
+    modalSelectedDays = modalSelectedDays.filter(d => d !== day);
+  } else {
+    modalSelectedDays.push(day);
+  }
+  el.classList.toggle('selected');
+}
+function pickModalCategory(key, el){
+  modalSelectedCategory = key;
+  document.querySelectorAll('#modal_cat_picker .cat-chip').forEach(chip => {
+    chip.classList.remove('selected');
+    const chipCat = catByKey(chip.dataset.key);
+    chip.style.background = 'transparent';
+    chip.style.color = `var(--${chipCat.color})`;
+  });
+  el.classList.add('selected');
+  const cat = catByKey(key);
+  el.style.background = `var(--${cat.color})`;
+  el.style.color = '#0d0f22';
+}
+function submitAddModal(){
+  const textEl = document.getElementById('modal_text');
+  const timeEl = document.getElementById('modal_time');
+  const recurEl = document.getElementById('modal_recurring');
+  const text = textEl.value.trim();
+  if(!text || modalSelectedDays.length === 0) return;
+  const time = timeEl.value || '';
+  const recurring = recurEl.checked;
+  const board = getBoard();
+  modalSelectedDays.forEach(day => {
+    board[day].push({text, time, category: modalSelectedCategory, recurring});
+  });
+  saveBoard(board);
+  closeModal();
+  renderBoard();
+}
+
+/* ================= Start ================= */
+renderBoard();
+</script>
+</body>
+</html>
