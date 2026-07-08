@@ -159,6 +159,29 @@
     background:var(--blue); color:#0d0f22; border:none; border-radius:10px; padding:12px 20px;
     cursor:pointer; font-size:15px; font-weight:700; width:100%; margin-top:6px;
   }
+
+  /* Post-its */
+  .postit-fab{
+    position:fixed; bottom:26px; right:26px; width:52px; height:52px; border-radius:50%;
+    background:var(--pink); color:#1a0a12; border:none; font-size:22px; cursor:pointer;
+    box-shadow:0 4px 14px rgba(236,72,153,0.4); z-index:40; display:flex; align-items:center; justify-content:center;
+  }
+  .postit-fab:hover{ filter:brightness(1.08); }
+  .postit{
+    position:absolute; width:220px; height:220px; border-radius:6px;
+    box-shadow:0 10px 28px rgba(0,0,0,0.35); z-index:30; display:flex; flex-direction:column;
+    overflow:hidden;
+  }
+  .postit-handle{
+    height:26px; display:flex; align-items:center; justify-content:flex-end; padding:0 6px;
+    cursor:grab; flex-shrink:0; background:rgba(0,0,0,0.06);
+  }
+  .postit-handle:active{ cursor:grabbing; }
+  .postit-del{
+    background:none; border:none; color:rgba(0,0,0,0.45); font-size:14px; cursor:pointer; padding:2px 5px;
+  }
+  .postit-del:hover{ color:rgba(0,0,0,0.8); }
+  .postit-canvas{ flex:1; width:100%; touch-action:none; cursor:crosshair; }
 </style>
 </head>
 <body>
@@ -180,6 +203,9 @@
     <div class="board-grid" id="board_grid"></div>
   </div>
 </div>
+
+<div id="postit_layer"></div>
+<button class="postit-fab" onclick="addPostIt()">✏️</button>
 
 <div class="overlay" id="overlay">
   <div class="modal" id="modalBody"></div>
@@ -537,8 +563,131 @@ function submitAddModal(){
   renderBoard();
 }
 
+/* ================= Post-its ================= */
+const POSTIT_KEY = 'postits_data';
+const POSTIT_COLORS = ['#f5e6a3', '#f7c6d9', '#b9ece0', '#c9d9f7', '#f7d9b9'];
+
+function getPostIts(){
+  try{
+    const raw = localStorage.getItem(POSTIT_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ console.error(e); }
+  return [];
+}
+function savePostIts(list){
+  try{ localStorage.setItem(POSTIT_KEY, JSON.stringify(list)); }
+  catch(e){ console.error(e); }
+}
+
+function addPostIt(){
+  const list = getPostIts();
+  const id = 'p' + Date.now();
+  const offset = (list.length % 6) * 24;
+  list.push({
+    id,
+    x: 60 + offset,
+    y: 100 + offset,
+    color: POSTIT_COLORS[list.length % POSTIT_COLORS.length],
+    drawing: null
+  });
+  savePostIts(list);
+  renderPostIts();
+}
+function deletePostIt(id){
+  const list = getPostIts().filter(p => p.id !== id);
+  savePostIts(list);
+  renderPostIts();
+}
+
+let postitDrag = null;
+
+function renderPostIts(){
+  const layer = document.getElementById('postit_layer');
+  const list = getPostIts();
+  layer.innerHTML = list.map(p => `
+    <div class="postit" id="${p.id}" style="left:${p.x}px; top:${p.y}px; background:${p.color};">
+      <div class="postit-handle" data-id="${p.id}" onpointerdown="startPostitDrag(event,'${p.id}')">
+        <button class="postit-del" onclick="deletePostIt('${p.id}')">✕</button>
+      </div>
+      <canvas class="postit-canvas" id="canvas_${p.id}" data-id="${p.id}"></canvas>
+    </div>
+  `).join('');
+
+  list.forEach(p => {
+    const canvas = document.getElementById('canvas_' + p.id);
+    if(!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * (window.devicePixelRatio || 1);
+    canvas.height = rect.height * (window.devicePixelRatio || 1);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+    ctx.strokeStyle = '#2a2a2a';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if(p.drawing){
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
+      img.src = p.drawing;
+    }
+
+    let drawing = false;
+    canvas.addEventListener('pointerdown', (e) => {
+      drawing = true;
+      canvas.setPointerCapture(e.pointerId);
+      const r = canvas.getBoundingClientRect();
+      ctx.beginPath();
+      ctx.moveTo(e.clientX - r.left, e.clientY - r.top);
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if(!drawing) return;
+      const r = canvas.getBoundingClientRect();
+      ctx.lineTo(e.clientX - r.left, e.clientY - r.top);
+      ctx.stroke();
+    });
+    canvas.addEventListener('pointerup', () => {
+      if(!drawing) return;
+      drawing = false;
+      const dataUrl = canvas.toDataURL('image/png');
+      const all = getPostIts();
+      const note = all.find(n => n.id === p.id);
+      if(note){ note.drawing = dataUrl; savePostIts(all); }
+    });
+  });
+}
+
+function startPostitDrag(e, id){
+  const el = document.getElementById(id);
+  const rect = el.getBoundingClientRect();
+  postitDrag = { id, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+  document.addEventListener('pointermove', onPostitDragMove);
+  document.addEventListener('pointerup', onPostitDragEnd);
+}
+function onPostitDragMove(e){
+  if(!postitDrag) return;
+  const el = document.getElementById(postitDrag.id);
+  if(!el) return;
+  el.style.left = (e.clientX - postitDrag.offsetX) + 'px';
+  el.style.top = (e.clientY - postitDrag.offsetY) + 'px';
+}
+function onPostitDragEnd(e){
+  if(!postitDrag) return;
+  const list = getPostIts();
+  const note = list.find(n => n.id === postitDrag.id);
+  if(note){
+    note.x = e.clientX - postitDrag.offsetX;
+    note.y = e.clientY - postitDrag.offsetY;
+    savePostIts(list);
+  }
+  postitDrag = null;
+  document.removeEventListener('pointermove', onPostitDragMove);
+  document.removeEventListener('pointerup', onPostitDragEnd);
+}
+
 /* ================= Start ================= */
 renderBoard();
+renderPostIts();
 </script>
 </body>
 </html>
