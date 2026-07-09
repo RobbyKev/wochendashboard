@@ -65,7 +65,7 @@
   /* Animierte Wetter-Icons */
   #weather_icon_slot{
     width:54px; height:54px; overflow:visible; flex-shrink:0;
-    display:flex; align-items:center; justify-content:center;
+    display:flex; align-items:center; justify-content:flex-end;
   }
   .wicon{
     position:relative; display:inline-block; width:12em; height:10em;
@@ -312,6 +312,16 @@
 
   /* Wetter-Modal */
   .hourly-row{ display:flex; gap:14px; overflow-x:auto; padding:14px 0 6px; }
+  .mini-icon-wrap{
+    width:26px; height:22px; overflow:hidden; display:flex; align-items:center; justify-content:center;
+    margin:0 auto;
+  }
+  .mini-icon-wrap .wicon{ font-size:2.1px; animation:none; }
+  .daily-icon-wrap{
+    width:22px; height:20px; overflow:hidden; display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .daily-icon-wrap .wicon{ font-size:1.8px; animation:none; }
   .hourly-item{ flex:0 0 auto; text-align:center; font-size:12.5px; color:var(--text-dim); }
   .hourly-item .h-time{ font-weight:600; margin-bottom:4px; }
   .hourly-item .h-temp{ font-weight:800; font-size:15px; color:var(--text); margin-top:4px; }
@@ -691,7 +701,7 @@ function openWeatherView(){
     const hour = new Date(t).toLocaleTimeString('de-DE',{hour:'2-digit'});
     const temp = Math.round(weatherData.hourly.temperature_2m[idx]);
     const pop = weatherData.hourly.precipitation_probability[idx];
-    return `<div class="hourly-item"><div class="h-time">${hour}</div>${weatherIcon(weatherData.hourly.weather_code[idx])}<div class="h-temp">${temp}°</div><div style="font-size:11px;color:var(--blue);margin-top:2px;">💧${pop}%</div></div>`;
+    return `<div class="hourly-item"><div class="h-time">${hour}</div><div class="mini-icon-wrap">${animatedWeatherIcon(weatherData.hourly.weather_code[idx])}</div><div class="h-temp">${temp}°</div><div style="font-size:11px;color:var(--blue);margin-top:2px;">💧${pop}%</div></div>`;
   }).join('');
 
   const allTemps = weatherData.daily.temperature_2m_max.concat(weatherData.daily.temperature_2m_min);
@@ -705,7 +715,7 @@ function openWeatherView(){
     return `
       <div class="daily-row">
         <span class="daily-name">${dayName}</span>
-        ${weatherIcon(weatherData.daily.weather_code[i])}
+        <div class="daily-icon-wrap">${animatedWeatherIcon(weatherData.daily.weather_code[i])}</div>
         <div class="daily-bar"><div class="daily-bar-fill" style="left:${leftPct}%; width:${widthPct}%;"></div></div>
         <span class="daily-range">${tmax}° / ${tmin}°</span>
       </div>
