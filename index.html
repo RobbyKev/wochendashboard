@@ -42,9 +42,9 @@
   /* Header */
   .header{
     display:flex; justify-content:space-between; align-items:center;
-    padding:22px 26px 14px; gap:14px;
+    padding:18px 18px 12px; gap:10px;
   }
-  .header-actions{ display:flex; gap:10px; align-items:center; }
+  .header-actions{ display:flex; gap:8px; align-items:center; }
   .clock{
     color:var(--text-dim); font-size:14px; font-weight:500;
     background:var(--card); padding:9px 18px; border-radius:22px; border:1px solid var(--line);
@@ -54,8 +54,8 @@
 
   /* Wetter-Kachel */
   .weather-tile{
-    display:flex; align-items:center; gap:12px; cursor:pointer;
-    background:var(--card); border:1px solid var(--line); border-radius:16px; padding:10px 16px;
+    display:flex; align-items:center; gap:8px; cursor:pointer;
+    background:var(--card); border:1px solid var(--line); border-radius:16px; padding:8px 12px;
   }
   .weather-tile:hover{ border-color:var(--blue); }
   .weather-temp-big{ font-size:30px; font-weight:800; color:var(--blue); }
@@ -63,9 +63,13 @@
   .weather-meta{ font-size:12px; color:var(--text-dim); margin-left:auto; text-align:right; line-height:1.5; }
 
   /* Animierte Wetter-Icons */
+  #weather_icon_slot{
+    width:54px; height:54px; overflow:visible; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+  }
   .wicon{
     position:relative; display:inline-block; width:12em; height:10em;
-    font-size:8px; flex-shrink:0;
+    font-size:9px; flex-shrink:0;
     animation: w-float 3s ease-in-out infinite;
   }
   @keyframes w-float{
@@ -279,8 +283,8 @@
 
   /* Fortschritt */
   .progress-tile{
-    display:flex; align-items:center; gap:12px;
-    background:var(--card); border:1px solid var(--line); border-radius:16px; padding:10px 16px;
+    display:flex; align-items:center; gap:8px;
+    background:var(--card); border:1px solid var(--line); border-radius:16px; padding:8px 12px;
   }
   .progress-num{ font-size:22px; font-weight:800; color:var(--teal); }
   .progress-bar-wrap{ flex:1; height:6px; background:var(--bg); border-radius:4px; overflow:hidden; min-width:80px; }
