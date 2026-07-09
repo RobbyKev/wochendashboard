@@ -19,7 +19,7 @@
     --teal: #22d3b6;
     --purple: #a78bfa;
     --line: rgba(255,255,255,0.07);
-    --item-font-size: 9.5px;
+    --item-font-size: 12.5px;
   }
   *{box-sizing:border-box;}
   html,body{
@@ -94,11 +94,14 @@
     text-transform:uppercase; letter-spacing:0.05em; padding-bottom:6px; border-bottom:1px solid var(--line); margin-bottom:2px;
   }
   .day-header.today{ color:var(--blue); }
+  .time-group-section{ min-height:6px; }
+  .time-group-items{ display:flex; flex-direction:column; gap:5px; }
+  .no-group-items{ display:flex; flex-direction:column; gap:5px; margin-top:4px; }
   .time-group-label{
     font-size:9px; font-weight:700; color:var(--text-dim); text-transform:uppercase;
-    letter-spacing:0.06em; margin:4px 2px 0 2px; opacity:0.65;
+    letter-spacing:0.06em; margin:4px 2px 3px 2px; opacity:0.65;
   }
-  .time-group-label:first-of-type{ margin-top:0; }
+  .time-group-section:first-of-type .time-group-label{ margin-top:0; }
   .list-item{
     background:var(--card-hi); border-radius:9px; padding:6px 22px 6px 8px; position:relative;
     font-size:var(--item-font-size); line-height:1.3; border-left:3px solid var(--blue); cursor:grab;
@@ -446,15 +449,23 @@ setInterval(loadWeather, 15 * 60 * 1000);
 let dragSrc = null;
 
 const TIME_GROUPS = [
-  {key:'morgens', label:'Morgens', from:5, to:12},
-  {key:'mittags', label:'Mittags', from:12, to:17},
-  {key:'abends', label:'Abends', from:17, to:24},
-  {key:'nachts', label:'Nachts', from:0, to:5}
+  {key:'morgens', label:'Morgens', from:5, to:12, always:true},
+  {key:'mittags', label:'Mittags', from:12, to:17, always:true},
+  {key:'abends', label:'Abends', from:17, to:24, always:true},
+  {key:'nachts', label:'Nachts', from:0, to:5, always:false}
 ];
 function getTimeGroup(timeStr){
   if(!timeStr) return null;
   const h = parseInt(timeStr.split(':')[0], 10);
   return TIME_GROUPS.find(g => h >= g.from && h < g.to) || null;
+}
+function getEffectiveGroup(item){
+  if(item.period){
+    const g = TIME_GROUPS.find(g => g.key === item.period);
+    if(g) return g;
+  }
+  if(item.time) return getTimeGroup(item.time);
+  return null;
 }
 
 function renderBoard(){
@@ -472,16 +483,28 @@ function renderBoard(){
     let sectionsHtml = '';
     TIME_GROUPS.forEach(g => {
       const inGroup = items.filter(it => {
-        const grp = getTimeGroup(it.time);
-        return grp && grp.key === g.key;
-      }).sort((a,b) => a.time.localeCompare(b.time));
-      if(inGroup.length === 0) return;
-      sectionsHtml += `<div class="time-group-label">${g.label}</div>`;
-      sectionsHtml += inGroup.map(obj => renderItemHtml(obj, day)).join('');
+        const eff = getEffectiveGroup(it);
+        return eff && eff.key === g.key;
+      });
+      if(!g.always && inGroup.length === 0) return;
+
+      const timed = inGroup.filter(it => it.time);
+      const untimed = inGroup.filter(it => !it.time);
+      const ordered = timed.concat(untimed);
+      const itemsHtml = ordered.map(obj => renderItemHtml(obj, day)).join('');
+
+      sectionsHtml += `
+        <div class="time-group-section" data-day="${day}" data-group="${g.key}"
+          ondragover="onGroupDragOver(event)" ondrop="onGroupDrop(event, '${day}', '${g.key}')">
+          <div class="time-group-label">${g.label}</div>
+          <div class="time-group-items">${itemsHtml}</div>
+        </div>
+      `;
     });
-    const withoutTime = items.filter(it => !it.time);
-    if(withoutTime.length > 0){
-      sectionsHtml += withoutTime.map(obj => renderItemHtml(obj, day)).join('');
+
+    const noGroupItems = items.filter(it => !getEffectiveGroup(it));
+    if(noGroupItems.length > 0){
+      sectionsHtml += `<div class="no-group-items">${noGroupItems.map(obj => renderItemHtml(obj, day)).join('')}</div>`;
     }
 
     return `
@@ -499,6 +522,19 @@ function renderBoard(){
   const todayDone = todayItems.filter(it => typeof it === 'object' && it.done).length;
   updateProgress(todayItems.length, todayDone);
 }
+function onGroupDragOver(e){ e.preventDefault(); e.stopPropagation(); }
+function onGroupDrop(e, targetDay, groupKey){
+  e.preventDefault();
+  e.stopPropagation();
+  if(!dragSrc) return;
+  const board = getBoard();
+  const [moved] = board[dragSrc.day].splice(dragSrc.idx, 1);
+  moved.period = groupKey;
+  board[targetDay].push(moved);
+  saveBoard(board);
+  dragSrc = null;
+  renderBoard();
+}
 function updateProgress(total, done){
   const numEl = document.getElementById('progress_num');
   const barEl = document.getElementById('progress_bar');
@@ -513,10 +549,14 @@ function renderItemHtml(obj, day){
   const timeLabel = obj.time ? `<span class="item-time">${obj.time}</span>` : '';
   const recurLabel = obj.recurring ? `<span class="recur-icon">🔁</span>` : '';
   const prioDot = obj.priority ? `<span class="prio-dot ${obj.priority}"></span>` : '';
+  const eff = getEffectiveGroup(obj);
+  const effKey = eff ? eff.key : '';
   return `
     <div class="list-item ${obj.done ? 'done' : ''}" style="border-left-color:${borderColor}" draggable="true"
       data-day="${day}" data-idx="${obj.origIdx}"
-      ondragstart="onDragStart(event)" ondragend="onDragEnd(event)" onclick="handleItemTap(event, '${day}', ${obj.origIdx})">
+      ondragstart="onDragStart(event)" ondragend="onDragEnd(event)"
+      ondragover="onItemDragOver(event)" ondrop="onItemDrop(event, '${day}', ${obj.origIdx}, '${effKey}')"
+      onclick="handleItemTap(event, '${day}', ${obj.origIdx})">
       ${prioDot}${recurLabel}${timeLabel}${escapeHtml(obj.text)}<span class="del" onclick="event.stopPropagation(); deleteBoardItem('${day}', ${obj.origIdx})">✕</span>
     </div>
   `;
@@ -564,6 +604,32 @@ function onDrop(e){
   const board = getBoard();
   const [moved] = board[dragSrc.day].splice(dragSrc.idx, 1);
   board[targetDay].push(moved);
+  saveBoard(board);
+  dragSrc = null;
+  renderBoard();
+}
+function onItemDragOver(e){
+  e.preventDefault();
+  e.stopPropagation();
+}
+function onItemDrop(e, targetDay, targetIdx, targetGroupKey){
+  e.preventDefault();
+  e.stopPropagation();
+  if(!dragSrc) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const insertBefore = (e.clientY - rect.top) < (rect.height / 2);
+
+  const board = getBoard();
+  const [moved] = board[dragSrc.day].splice(dragSrc.idx, 1);
+  if(targetGroupKey) moved.period = targetGroupKey;
+
+  let insertAt = targetIdx;
+  if(dragSrc.day === targetDay && dragSrc.idx < targetIdx){
+    insertAt = targetIdx - 1;
+  }
+  if(!insertBefore) insertAt += 1;
+
+  board[targetDay].splice(insertAt, 0, moved);
   saveBoard(board);
   dragSrc = null;
   renderBoard();
@@ -664,6 +730,19 @@ function pickModalPriority(key, el){
     el.classList.add('selected');
   }
 }
+function insertSorted(dayArray, newItem){
+  if(!newItem.time){ dayArray.push(newItem); return; }
+  let insertAt = dayArray.length;
+  for(let i = 0; i < dayArray.length; i++){
+    const existing = dayArray[i];
+    const existingTime = (typeof existing === 'string') ? '' : (existing.time || '');
+    if(existingTime && existingTime.localeCompare(newItem.time) > 0){
+      insertAt = i;
+      break;
+    }
+  }
+  dayArray.splice(insertAt, 0, newItem);
+}
 function submitAddModal(){
   const textEl = document.getElementById('modal_text');
   const timeEl = document.getElementById('modal_time');
@@ -674,7 +753,7 @@ function submitAddModal(){
   const recurring = recurEl.checked;
   const board = getBoard();
   modalSelectedDays.forEach(day => {
-    board[day].push({text, time, category: modalSelectedCategory, recurring, priority: modalSelectedPriority, done: false});
+    insertSorted(board[day], {text, time, category: modalSelectedCategory, recurring, priority: modalSelectedPriority, done: false});
   });
   saveBoard(board);
   closeModal();
