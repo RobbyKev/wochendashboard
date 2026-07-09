@@ -94,6 +94,11 @@
     text-transform:uppercase; letter-spacing:0.05em; padding-bottom:6px; border-bottom:1px solid var(--line); margin-bottom:2px;
   }
   .day-header.today{ color:var(--blue); }
+  .time-group-label{
+    font-size:9px; font-weight:700; color:var(--text-dim); text-transform:uppercase;
+    letter-spacing:0.06em; margin:4px 2px 0 2px; opacity:0.65;
+  }
+  .time-group-label:first-of-type{ margin-top:0; }
   .list-item{
     background:var(--card-hi); border-radius:9px; padding:6px 22px 6px 8px; position:relative;
     font-size:var(--item-font-size); line-height:1.3; border-left:3px solid var(--blue); cursor:grab;
@@ -440,6 +445,18 @@ setInterval(loadWeather, 15 * 60 * 1000);
 /* ================= Wochenboard ================= */
 let dragSrc = null;
 
+const TIME_GROUPS = [
+  {key:'morgens', label:'Morgens', from:5, to:12},
+  {key:'mittags', label:'Mittags', from:12, to:17},
+  {key:'abends', label:'Abends', from:17, to:24},
+  {key:'nachts', label:'Nachts', from:0, to:5}
+];
+function getTimeGroup(timeStr){
+  if(!timeStr) return null;
+  const h = parseInt(timeStr.split(':')[0], 10);
+  return TIME_GROUPS.find(g => h >= g.from && h < g.to) || null;
+}
+
 function renderBoard(){
   const board = getBoard();
   const todayIdx = dowIndex();
@@ -452,17 +469,26 @@ function renderBoard(){
       return Object.assign({}, obj, {origIdx});
     });
 
-    const withTime = items.filter(it => it.time).sort((a,b) => a.time.localeCompare(b.time));
+    let sectionsHtml = '';
+    TIME_GROUPS.forEach(g => {
+      const inGroup = items.filter(it => {
+        const grp = getTimeGroup(it.time);
+        return grp && grp.key === g.key;
+      }).sort((a,b) => a.time.localeCompare(b.time));
+      if(inGroup.length === 0) return;
+      sectionsHtml += `<div class="time-group-label">${g.label}</div>`;
+      sectionsHtml += inGroup.map(obj => renderItemHtml(obj, day)).join('');
+    });
     const withoutTime = items.filter(it => !it.time);
-    const ordered = withTime.concat(withoutTime);
-
-    const itemsHtml = ordered.map(obj => renderItemHtml(obj, day)).join('');
+    if(withoutTime.length > 0){
+      sectionsHtml += withoutTime.map(obj => renderItemHtml(obj, day)).join('');
+    }
 
     return `
       <div class="day-col ${i === todayIdx ? 'today' : ''}" data-day="${day}"
         ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
         <div class="day-header ${i === todayIdx ? 'today' : ''}">${DAY_FULL[i].slice(0,2)}</div>
-        ${itemsHtml}
+        ${sectionsHtml}
       </div>
     `;
   }).join('');
