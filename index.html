@@ -123,6 +123,7 @@
   .list-item.dragging{ opacity:0.4; }
   .list-item .del{ position:absolute; top:4px; right:5px; color:var(--text-dim); font-size:12px; cursor:pointer; padding:3px; }
   .recur-icon{ font-size:10px; margin-right:3px; opacity:0.85; }
+  .tpl-icon{ font-size:10px; margin-right:3px; opacity:0.85; }
   .item-time{ font-weight:700; color:var(--text-dim); font-size:10.5px; margin-right:5px; }
   .list-item.done{ text-decoration:line-through; opacity:0.65; }
   .prio-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:middle; }
@@ -194,6 +195,18 @@
   }
   .day-chip.selected{ background:var(--blue); color:#0d0f22; border-color:var(--blue); }
   .cat-picker{ display:flex; gap:6px; flex-wrap:wrap; }
+  .tpl-picker{ display:flex; gap:6px; flex-wrap:wrap; }
+  .tpl-chip{
+    font-size:12.5px; font-weight:700; padding:8px 13px; border-radius:9px; cursor:pointer;
+    color:var(--text-dim); background:var(--bg); border:1.5px solid var(--line);
+  }
+  .tpl-chip.selected{ background:var(--teal); color:#0d0f22; border-color:var(--teal); }
+  .tpl-chip.tpl-new{ border-style:dashed; }
+  .new-tpl-box{ margin-top:10px; padding:12px; background:var(--bg); border-radius:10px; border:1px solid var(--line); }
+  .small-add-step{
+    background:var(--card-hi); color:var(--text); border:1px solid var(--line); border-radius:8px;
+    padding:7px 12px; font-size:12.5px; cursor:pointer;
+  }
   .cat-chip{
     font-size:12px; font-weight:700; padding:7px 12px; border-radius:9px; cursor:pointer;
     color:var(--text-dim); background:var(--bg); border:1.5px solid transparent; white-space:nowrap;
@@ -210,6 +223,7 @@
     cursor:pointer; font-size:14px; font-weight:600; width:100%; margin-top:10px;
   }
   .modal-delete:hover{ background:rgba(255,107,107,0.1); }
+  .tpl-info{ font-size:12px; color:var(--teal); background:rgba(34,211,182,0.1); padding:8px 10px; border-radius:8px; margin:10px 0 0; }
 
   /* Post-its */
   .postit-fab{
@@ -322,6 +336,21 @@ db.collection('wochendashboard').doc('board').onSnapshot(doc => {
   boardLoaded = true;
   renderBoard();
 }, err => console.error('Firestore-Fehler (Board):', err));
+
+/* ================= Vorlagen ================= */
+const DEFAULT_TEMPLATES = [
+  { id:'waesche', name:'Wäsche', category:'haushalt', steps:['Wäsche anstellen','Wäsche aufhängen','Wäsche falten','Wäsche wegräumen'] }
+];
+let templatesCache = DEFAULT_TEMPLATES;
+function getTemplates(){ return templatesCache; }
+function saveTemplates(list){
+  templatesCache = list;
+  db.collection('wochendashboard').doc('templates').set({ data: list }).catch(e => console.error('Speichern fehlgeschlagen:', e));
+}
+db.collection('wochendashboard').doc('templates').onSnapshot(doc => {
+  templatesCache = (doc.exists && doc.data().data && doc.data().data.length) ? doc.data().data : DEFAULT_TEMPLATES;
+  renderBoard();
+}, err => console.error('Firestore-Fehler (Vorlagen):', err));
 
 /* ================= Uhr ================= */
 function tickClock(){
@@ -603,21 +632,34 @@ function updateProgress(total, done){
   barEl.style.width = total === 0 ? '0%' : Math.round((done/total)*100) + '%';
 }
 
+function getDisplayText(obj){
+  if(obj.templateId){
+    const tpl = templatesCache.find(t => t.id === obj.templateId);
+    if(tpl){
+      if(obj.done) return tpl.name;
+      const idx = Math.min(obj.stepIndex || 0, tpl.steps.length - 1);
+      return tpl.steps[idx];
+    }
+  }
+  return obj.text;
+}
 function renderItemHtml(obj, day){
   const cat = catByKey(obj.category);
   const borderColor = cat ? `var(--${cat.color})` : 'var(--blue)';
   const timeLabel = obj.time ? `<span class="item-time">${obj.time}</span>` : '';
   const recurLabel = obj.recurring ? `<span class="recur-icon">🔁</span>` : '';
   const prioDot = obj.priority ? `<span class="prio-dot ${obj.priority}"></span>` : '';
+  const tplLabel = obj.templateId ? `<span class="tpl-icon">🔄</span>` : '';
   const eff = getEffectiveGroup(obj);
   const effKey = eff ? eff.key : '';
+  const displayText = getDisplayText(obj);
   return `
     <div class="list-item ${obj.done ? 'done' : ''}" style="border-left-color:${borderColor}" draggable="true"
       data-day="${day}" data-idx="${obj.origIdx}"
       ondragstart="onDragStart(event)" ondragend="onDragEnd(event)"
       ondragover="onItemDragOver(event)" ondrop="onItemDrop(event, '${day}', ${obj.origIdx}, '${effKey}')"
       onclick="handleItemTap(event, '${day}', ${obj.origIdx})">
-      ${prioDot}${recurLabel}${timeLabel}${escapeHtml(obj.text)}<span class="del" onclick="event.stopPropagation(); openEditModal('${day}', ${obj.origIdx})">✎</span>
+      ${prioDot}${recurLabel}${tplLabel}${timeLabel}${escapeHtml(displayText)}<span class="del" onclick="event.stopPropagation(); openEditModal('${day}', ${obj.origIdx})">✎</span>
     </div>
   `;
 }
@@ -634,9 +676,20 @@ function handleItemTap(e, day, idx){
 }
 function toggleDone(day, idx){
   const board = getBoard();
-  const item = board[day][idx];
+  let item = board[day][idx];
   if(typeof item === 'string'){
-    board[day][idx] = {text: item, done: true};
+    item = {text: item};
+    board[day][idx] = item;
+  }
+  const tpl = item.templateId ? templatesCache.find(t => t.id === item.templateId) : null;
+  if(tpl){
+    if(item.done){
+      item.done = false;
+    } else if((item.stepIndex || 0) < tpl.steps.length - 1){
+      item.stepIndex = (item.stepIndex || 0) + 1;
+    } else {
+      item.done = true;
+    }
   } else {
     item.done = !item.done;
   }
@@ -712,11 +765,14 @@ const PRIORITIES = [
   {key:'low', label:'Niedrig'}
 ];
 
+let modalSelectedTemplate = null;
+
 function openAddModal(){
   modalSelectedDays = [DAYS[dowIndex()]];
   modalSelectedCategory = CATEGORIES[0].key;
   modalSelectedPriority = null;
   modalSelectedPeriod = null;
+  modalSelectedTemplate = null;
 
   const dayChips = DAYS.map(d => `
     <div class="day-chip ${modalSelectedDays.includes(d) ? 'selected' : ''}" data-day="${d}" onclick="toggleModalDay('${d}', this)">${d}</div>
@@ -734,9 +790,17 @@ function openAddModal(){
   const periodChips = TIME_GROUPS.filter(g => g.always).map(g => `
     <div class="day-chip" data-key="${g.key}" onclick="pickModalPeriod('${g.key}', this)">${g.label}</div>
   `).join('');
+  const tplChips = getTemplates().map(t => `
+    <div class="tpl-chip" data-id="${t.id}" onclick="pickModalTemplate('${t.id}')">🔄 ${t.name}</div>
+  `).join('') + `<div class="tpl-chip tpl-new" onclick="showNewTemplateForm()">+ Neu</div>`;
 
   openModal(`
     <h2>Neuer Eintrag</h2>
+    <div class="modal-field">
+      <label>Vorlage (optional)</label>
+      <div class="tpl-picker" id="modal_tpl_picker">${tplChips}</div>
+      <div id="new_tpl_form"></div>
+    </div>
     <div class="modal-field">
       <label>Was steht an?</label>
       <input type="text" class="modal-input" id="modal_text" placeholder="z.B. Pflanzen gießen">
@@ -777,6 +841,53 @@ function pickModalPeriod(key, el){
     document.querySelectorAll('#modal_period_picker .day-chip').forEach(chip => chip.classList.remove('selected'));
     el.classList.add('selected');
   }
+}
+function pickModalTemplate(id){
+  const tpl = getTemplates().find(t => t.id === id);
+  if(!tpl) return;
+  modalSelectedTemplate = tpl;
+  document.getElementById('modal_text').value = tpl.steps[0];
+  const catChip = document.querySelector(`#modal_cat_picker .cat-chip[data-key="${tpl.category}"]`);
+  if(catChip) pickModalCategory(tpl.category, catChip);
+  document.querySelectorAll('#modal_tpl_picker .tpl-chip').forEach(c => c.classList.remove('selected'));
+  const chip = document.querySelector(`#modal_tpl_picker .tpl-chip[data-id="${id}"]`);
+  if(chip) chip.classList.add('selected');
+}
+function showNewTemplateForm(){
+  const container = document.getElementById('new_tpl_form');
+  container.innerHTML = `
+    <div class="new-tpl-box">
+      <input type="text" class="modal-input" id="new_tpl_name" placeholder="Name der Vorlage, z.B. Einkaufen" style="margin-bottom:8px;">
+      <div id="new_tpl_steps">
+        <input type="text" class="modal-input step-input" placeholder="Schritt 1" style="margin-bottom:6px;">
+        <input type="text" class="modal-input step-input" placeholder="Schritt 2" style="margin-bottom:6px;">
+      </div>
+      <button type="button" class="small-add-step" onclick="addTemplateStepField()">+ Schritt</button>
+      <button type="button" class="small-add-step" style="margin-left:6px;" onclick="saveNewTemplate()">Vorlage speichern</button>
+    </div>
+  `;
+}
+function addTemplateStepField(){
+  const wrap = document.getElementById('new_tpl_steps');
+  const n = wrap.querySelectorAll('.step-input').length + 1;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'modal-input step-input';
+  input.placeholder = 'Schritt ' + n;
+  input.style.marginBottom = '6px';
+  wrap.appendChild(input);
+}
+function saveNewTemplate(){
+  const name = document.getElementById('new_tpl_name').value.trim();
+  const steps = [...document.querySelectorAll('#new_tpl_steps .step-input')]
+    .map(i => i.value.trim()).filter(v => v);
+  if(!name || steps.length < 2) return;
+  const id = 'tpl_' + Date.now();
+  const list = getTemplates().slice();
+  list.push({ id, name, category: modalSelectedCategory, steps });
+  saveTemplates(list);
+  openAddModal();
+  setTimeout(() => pickModalTemplate(id), 100);
 }
 function toggleModalDay(day, el){
   if(modalSelectedDays.includes(day)){
@@ -832,7 +943,12 @@ function submitAddModal(){
   const recurring = recurEl.checked;
   const board = getBoard();
   modalSelectedDays.forEach(day => {
-    insertSorted(board[day], {text, time, category: modalSelectedCategory, recurring, priority: modalSelectedPriority, period: modalSelectedPeriod, done: false});
+    const newItem = {text, time, category: modalSelectedCategory, recurring, priority: modalSelectedPriority, period: modalSelectedPeriod, done: false};
+    if(modalSelectedTemplate){
+      newItem.templateId = modalSelectedTemplate.id;
+      newItem.stepIndex = 0;
+    }
+    insertSorted(board[day], newItem);
   });
   saveBoard(board);
   closeModal();
@@ -853,6 +969,12 @@ function openEditModal(day, idx){
   modalSelectedPriority = item.priority || null;
   modalSelectedPeriod = item.period || null;
 
+  const tpl = item.templateId ? templatesCache.find(t => t.id === item.templateId) : null;
+  const displayText = getDisplayText(item);
+  const tplInfo = tpl
+    ? `<p class="tpl-info">🔄 Teil der Vorlage "${escapeHtml(tpl.name)}" – Schritt ${Math.min((item.stepIndex||0)+1, tpl.steps.length)}/${tpl.steps.length}. Text ändern löst die Vorlagen-Verknüpfung.</p>`
+    : '';
+
   const catChips = CATEGORIES.map((c) => `
     <div class="cat-chip ${c.key === modalSelectedCategory ? 'selected' : ''}"
       style="${c.key === modalSelectedCategory ? `background:var(--${c.color});color:#0d0f22;` : `color:var(--${c.color});`} border-color:var(--${c.color});"
@@ -869,9 +991,10 @@ function openEditModal(day, idx){
 
   openModal(`
     <h2>Eintrag bearbeiten</h2>
+    ${tplInfo}
     <div class="modal-field">
       <label>Was steht an?</label>
-      <input type="text" class="modal-input" id="modal_text" value="${escapeHtml(item.text || '')}">
+      <input type="text" class="modal-input" id="modal_text" value="${escapeHtml(displayText || '')}">
     </div>
     <div class="modal-field">
       <label>Uhrzeit (optional)</label>
@@ -905,8 +1028,14 @@ function submitEditModal(){
   if(!text || editDay === null) return;
   const board = getBoard();
   const existing = board[editDay][editIdx];
-  const done = (typeof existing === 'object' && existing.done) ? existing.done : false;
-  board[editDay][editIdx] = {
+  const existingObj = (typeof existing === 'object') ? existing : {};
+  const done = existingObj.done || false;
+
+  const originalDisplayText = getDisplayText(existingObj);
+  const textWasChanged = text !== originalDisplayText;
+  const keepTemplate = existingObj.templateId && !textWasChanged;
+
+  const updated = {
     text,
     time: timeEl.value || '',
     category: modalSelectedCategory,
@@ -915,6 +1044,11 @@ function submitEditModal(){
     recurring: recurEl.checked,
     done
   };
+  if(keepTemplate){
+    updated.templateId = existingObj.templateId;
+    updated.stepIndex = existingObj.stepIndex || 0;
+  }
+  board[editDay][editIdx] = updated;
   saveBoard(board);
   editDay = null; editIdx = null;
   closeModal();
