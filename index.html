@@ -20,6 +20,8 @@
     --amber: #f5a623;
     --teal: #22d3b6;
     --purple: #a78bfa;
+    --sky: #38bdf8;
+    --brown: #b08968;
     --line: rgba(255,255,255,0.07);
     --item-font-size: 11.5px;
     --now-color: #ff6b6b;
@@ -67,6 +69,13 @@
     box-shadow:0 4px 14px rgba(91,141,239,0.35); flex-shrink:0;
   }
   .add-fab:hover{ filter:brightness(1.08); }
+  .tpl-corner-btn{
+    position:absolute; top:16px; right:60px; width:32px; height:32px; border-radius:50%;
+    background:#6983b8; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    color:#0d0f22;
+  }
+  .tpl-corner-btn:hover{ filter:brightness(1.1); }
+  .tpl-corner-btn svg{ width:16px; height:16px; }
 
   /* Layout */
   .layout{ padding:8px 24px 28px; }
@@ -123,9 +132,11 @@
   .list-item.dragging{ opacity:0.4; }
   .list-item .del{ position:absolute; top:4px; right:5px; color:var(--text-dim); font-size:12px; cursor:pointer; padding:3px; }
   .recur-icon{ font-size:10px; margin-right:3px; opacity:0.85; }
-  .tpl-icon{ font-size:10px; margin-right:3px; opacity:0.85; }
+  .tpl-icon{ display:inline-flex; vertical-align:middle; margin-right:3px; opacity:0.85; color:#6983b8; }
+  .tpl-icon svg{ width:10px; height:10px; }
   .item-time{ font-weight:700; color:var(--text-dim); font-size:10.5px; margin-right:5px; }
   .list-item.done{ text-decoration:line-through; opacity:0.65; }
+  .list-item.prio-high-outline{ box-shadow:0 0 0 1.5px #ff6b6b inset; }
   .prio-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:middle; }
   .prio-dot.high{ background:#ff6b6b; }
   .prio-dot.medium{ background:#ffd93d; }
@@ -207,6 +218,23 @@
     background:var(--card-hi); color:var(--text); border:1px solid var(--line); border-radius:8px;
     padding:7px 12px; font-size:12.5px; cursor:pointer;
   }
+  .tpl-card{
+    background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:10px;
+  }
+  .tpl-card-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .tpl-card-name{ font-size:14px; font-weight:700; }
+  .tpl-card-edit{
+    background:none; border:1px solid var(--line); color:var(--text-dim); border-radius:8px;
+    padding:5px 10px; font-size:11.5px; cursor:pointer;
+  }
+  .tpl-card-edit:hover{ color:var(--text); border-color:var(--blue); }
+  .tpl-card-steps{ font-size:12px; color:var(--text-dim); line-height:1.5; }
+  .tpl-back{
+    background:none; border:none; color:var(--text-dim); font-size:13px; cursor:pointer;
+    margin-top:12px; width:100%; text-align:center; padding:8px;
+  }
+  .tpl-back:hover{ color:var(--text); }
+  .muted-note{ color:var(--text-dim); font-size:13px; }
   .cat-chip{
     font-size:12px; font-weight:700; padding:7px 12px; border-radius:9px; cursor:pointer;
     color:var(--text-dim); background:var(--bg); border:1.5px solid transparent; white-space:nowrap;
@@ -232,6 +260,35 @@
     box-shadow:0 4px 14px rgba(236,72,153,0.4); z-index:40; display:flex; align-items:center; justify-content:center;
   }
   .postit-fab:hover{ filter:brightness(1.08); }
+
+  /* Notizen */
+  .notes-fab{
+    position:fixed; bottom:26px; left:26px; width:52px; height:52px; border-radius:50%;
+    background:var(--amber); color:#1a1206; border:none; cursor:pointer;
+    box-shadow:0 4px 14px rgba(245,166,35,0.4); z-index:40; display:flex; align-items:center; justify-content:center;
+  }
+  .notes-fab:hover{ filter:brightness(1.08); }
+  .notes-fab svg{ width:22px; height:22px; }
+  .notes-panel{
+    position:fixed; bottom:90px; left:26px; width:300px; max-width:calc(100vw - 52px);
+    height:340px; background:var(--card); border:1px solid var(--line); border-radius:16px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.4); z-index:39; display:none; flex-direction:column;
+    overflow:hidden;
+  }
+  .notes-panel.open{ display:flex; }
+  .notes-panel-head{
+    display:flex; justify-content:space-between; align-items:center; padding:12px 14px;
+    border-bottom:1px solid var(--line); font-size:13px; font-weight:700; color:var(--text-dim);
+    text-transform:uppercase; letter-spacing:0.05em;
+  }
+  .notes-close{ background:none; border:none; color:var(--text-dim); font-size:14px; cursor:pointer; padding:4px; }
+  .notes-close:hover{ color:var(--text); }
+  #notes_textarea{
+    flex:1; background:transparent; border:none; outline:none; color:var(--text);
+    font-family:'Inter', sans-serif; font-size:13.5px; line-height:1.6; padding:14px; resize:none;
+  }
+  #notes_textarea::placeholder{ color:var(--text-dim); }
+
   .postit{
     position:absolute; border-radius:6px;
     box-shadow:0 10px 28px rgba(0,0,0,0.35); z-index:30; display:flex; flex-direction:column;
@@ -285,6 +342,17 @@
 <div id="postit_layer"></div>
 <button class="postit-fab" onclick="addPostIt()">✏️</button>
 
+<button class="notes-fab" onclick="toggleNotesPanel()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5M6 3h8l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>
+</button>
+<div class="notes-panel" id="notes_panel">
+  <div class="notes-panel-head">
+    <span>Notizen</span>
+    <button class="notes-close" onclick="toggleNotesPanel()">✕</button>
+  </div>
+  <textarea id="notes_textarea" placeholder="Stichpunkte hier..." oninput="onNotesInput()"></textarea>
+</div>
+
 <div class="overlay" id="overlay">
   <div class="modal" id="modalBody"></div>
 </div>
@@ -295,11 +363,11 @@ const DAYS = ["Mo","Di","Mi","Do","Fr","Sa","So"];
 const DAY_FULL = ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"];
 const STORAGE_KEY = "wochenboard_data";
 const CATEGORIES = [
-  {key:'pause', label:'Pause', color:'teal'},
   {key:'haushalt', label:'Haushalt', color:'blue'},
   {key:'garten', label:'Garten', color:'amber'},
-  {key:'theo', label:'Theo', color:'pink'},
-  {key:'termine', label:'Termine', color:'purple'}
+  {key:'theo', label:'Theo', color:'brown'},
+  {key:'termine', label:'Termine', color:'sky'},
+  {key:'pause', label:'Pause', color:'teal'}
 ];
 function catByKey(key){ return CATEGORIES.find(c=>c.key===key) || null; }
 function dowIndex(){
@@ -649,12 +717,13 @@ function renderItemHtml(obj, day){
   const timeLabel = obj.time ? `<span class="item-time">${obj.time}</span>` : '';
   const recurLabel = obj.recurring ? `<span class="recur-icon">🔁</span>` : '';
   const prioDot = obj.priority ? `<span class="prio-dot ${obj.priority}"></span>` : '';
-  const tplLabel = obj.templateId ? `<span class="tpl-icon">🔄</span>` : '';
+  const tplLabel = obj.templateId ? `<span class="tpl-icon">${REPEAT_ICON_SVG}</span>` : '';
   const eff = getEffectiveGroup(obj);
   const effKey = eff ? eff.key : '';
   const displayText = getDisplayText(obj);
+  const highClass = (obj.priority === 'high' && !obj.done) ? 'prio-high-outline' : '';
   return `
-    <div class="list-item ${obj.done ? 'done' : ''}" style="border-left-color:${borderColor}" draggable="true"
+    <div class="list-item ${obj.done ? 'done' : ''} ${highClass}" style="border-left-color:${borderColor}" draggable="true"
       data-day="${day}" data-idx="${obj.origIdx}"
       ondragstart="onDragStart(event)" ondragend="onDragEnd(event)"
       ondragover="onItemDragOver(event)" ondrop="onItemDrop(event, '${day}', ${obj.origIdx}, '${effKey}')"
@@ -767,6 +836,8 @@ const PRIORITIES = [
 
 let modalSelectedTemplate = null;
 
+const REPEAT_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>`;
+
 function openAddModal(){
   modalSelectedDays = [DAYS[dowIndex()]];
   modalSelectedCategory = CATEGORIES[0].key;
@@ -790,17 +861,14 @@ function openAddModal(){
   const periodChips = TIME_GROUPS.filter(g => g.always).map(g => `
     <div class="day-chip" data-key="${g.key}" onclick="pickModalPeriod('${g.key}', this)">${g.label}</div>
   `).join('');
-  const tplChips = getTemplates().map(t => `
-    <div class="tpl-chip" data-id="${t.id}" onclick="pickModalTemplate('${t.id}')">🔄 ${t.name}</div>
-  `).join('') + `<div class="tpl-chip tpl-new" onclick="showNewTemplateForm()">+ Neu</div>`;
+  const tplInfo = modalSelectedTemplate
+    ? `<p class="tpl-info">Vorlage: ${escapeHtml(modalSelectedTemplate.name)} (Schritt 1/${modalSelectedTemplate.steps.length})</p>`
+    : '';
 
   openModal(`
+    <button class="tpl-corner-btn" title="Vorlagen" onclick="openTemplatesModal()">${REPEAT_ICON_SVG}</button>
     <h2>Neuer Eintrag</h2>
-    <div class="modal-field">
-      <label>Vorlage (optional)</label>
-      <div class="tpl-picker" id="modal_tpl_picker">${tplChips}</div>
-      <div id="new_tpl_form"></div>
-    </div>
+    ${tplInfo}
     <div class="modal-field">
       <label>Was steht an?</label>
       <input type="text" class="modal-input" id="modal_text" placeholder="z.B. Pflanzen gießen">
@@ -846,29 +914,86 @@ function pickModalTemplate(id){
   const tpl = getTemplates().find(t => t.id === id);
   if(!tpl) return;
   modalSelectedTemplate = tpl;
-  document.getElementById('modal_text').value = tpl.steps[0];
+  const textEl = document.getElementById('modal_text');
+  if(textEl) textEl.value = tpl.steps[0];
   const catChip = document.querySelector(`#modal_cat_picker .cat-chip[data-key="${tpl.category}"]`);
   if(catChip) pickModalCategory(tpl.category, catChip);
-  document.querySelectorAll('#modal_tpl_picker .tpl-chip').forEach(c => c.classList.remove('selected'));
-  const chip = document.querySelector(`#modal_tpl_picker .tpl-chip[data-id="${id}"]`);
-  if(chip) chip.classList.add('selected');
+
+  const h2 = document.querySelector('#modalBody h2');
+  if(h2){
+    let info = document.querySelector('#modalBody .tpl-info');
+    if(!info){
+      info = document.createElement('p');
+      info.className = 'tpl-info';
+      h2.insertAdjacentElement('afterend', info);
+    }
+    info.textContent = `Vorlage: ${tpl.name} (Schritt 1/${tpl.steps.length})`;
+  }
 }
-function showNewTemplateForm(){
-  const container = document.getElementById('new_tpl_form');
-  container.innerHTML = `
-    <div class="new-tpl-box">
-      <input type="text" class="modal-input" id="new_tpl_name" placeholder="Name der Vorlage, z.B. Einkaufen" style="margin-bottom:8px;">
-      <div id="new_tpl_steps">
-        <input type="text" class="modal-input step-input" placeholder="Schritt 1" style="margin-bottom:6px;">
-        <input type="text" class="modal-input step-input" placeholder="Schritt 2" style="margin-bottom:6px;">
+
+/* ================= Vorlagen-Verwaltung (eigenes Fenster) ================= */
+function openTemplatesModal(){
+  renderTemplatesListModal();
+}
+function renderTemplatesListModal(){
+  const list = getTemplates();
+  const cards = list.map(t => `
+    <div class="tpl-card">
+      <div class="tpl-card-head">
+        <span class="tpl-card-name"><span class="tpl-icon">${REPEAT_ICON_SVG}</span> ${escapeHtml(t.name)}</span>
+        <button class="tpl-card-edit" onclick="openTemplateEditForm('${t.id}')">Bearbeiten</button>
       </div>
-      <button type="button" class="small-add-step" onclick="addTemplateStepField()">+ Schritt</button>
-      <button type="button" class="small-add-step" style="margin-left:6px;" onclick="saveNewTemplate()">Vorlage speichern</button>
+      <div class="tpl-card-steps">${t.steps.map(s => escapeHtml(s)).join(' → ')}</div>
+      <button class="modal-submit" style="margin-top:8px;" onclick="startAddFromTemplate('${t.id}')">Hinzufügen</button>
     </div>
-  `;
+  `).join('');
+
+  openModal(`
+    <h2>Vorlagen</h2>
+    <div id="tpl_list">${cards || '<p class="muted-note">Noch keine Vorlagen.</p>'}</div>
+    <button class="modal-submit" style="margin-top:14px;" onclick="openTemplateEditForm(null)">+ Neue Vorlage</button>
+  `, true);
+}
+function startAddFromTemplate(id){
+  closeModal();
+  openAddModal();
+  setTimeout(() => pickModalTemplate(id), 50);
+}
+function openTemplateEditForm(id){
+  const tpl = id ? getTemplates().find(t => t.id === id) : null;
+  const catChips = CATEGORIES.map((c) => `
+    <div class="cat-chip ${tpl && tpl.category === c.key ? 'selected' : (!tpl && c.key === CATEGORIES[0].key ? 'selected' : '')}"
+      style="${(tpl ? tpl.category === c.key : c.key === CATEGORIES[0].key) ? `background:var(--${c.color});color:#0d0f22;` : `color:var(--${c.color});`} border-color:var(--${c.color});"
+      data-key="${c.key}" onclick="pickModalCategory('${c.key}', this)">${c.label}</div>
+  `).join('');
+  modalSelectedCategory = tpl ? tpl.category : CATEGORIES[0].key;
+
+  const stepsHtml = (tpl ? tpl.steps : ['','']).map(s => `
+    <input type="text" class="modal-input step-input" value="${escapeHtml(s)}" style="margin-bottom:6px;">
+  `).join('');
+
+  openModal(`
+    <h2>${tpl ? 'Vorlage bearbeiten' : 'Neue Vorlage'}</h2>
+    <div class="modal-field">
+      <label>Name</label>
+      <input type="text" class="modal-input" id="tpl_name" value="${tpl ? escapeHtml(tpl.name) : ''}" placeholder="z.B. Einkaufen">
+    </div>
+    <div class="modal-field">
+      <label>Kategorie</label>
+      <div class="cat-picker" id="modal_cat_picker">${catChips}</div>
+    </div>
+    <div class="modal-field">
+      <label>Schritte (der Reihe nach)</label>
+      <div id="tpl_steps">${stepsHtml}</div>
+      <button type="button" class="small-add-step" onclick="addTemplateStepField()">+ Schritt</button>
+    </div>
+    <button class="modal-submit" onclick="saveTemplateForm('${tpl ? tpl.id : ''}')">Speichern</button>
+    ${tpl ? `<button class="modal-delete" onclick="deleteTemplateForm('${tpl.id}')">Vorlage löschen</button>` : ''}
+    <button class="tpl-back" onclick="openTemplatesModal()">← Zurück zur Übersicht</button>
+  `);
 }
 function addTemplateStepField(){
-  const wrap = document.getElementById('new_tpl_steps');
+  const wrap = document.getElementById('tpl_steps');
   const n = wrap.querySelectorAll('.step-input').length + 1;
   const input = document.createElement('input');
   input.type = 'text';
@@ -877,17 +1002,25 @@ function addTemplateStepField(){
   input.style.marginBottom = '6px';
   wrap.appendChild(input);
 }
-function saveNewTemplate(){
-  const name = document.getElementById('new_tpl_name').value.trim();
-  const steps = [...document.querySelectorAll('#new_tpl_steps .step-input')]
+function saveTemplateForm(existingId){
+  const name = document.getElementById('tpl_name').value.trim();
+  const steps = [...document.querySelectorAll('#tpl_steps .step-input')]
     .map(i => i.value.trim()).filter(v => v);
   if(!name || steps.length < 2) return;
-  const id = 'tpl_' + Date.now();
   const list = getTemplates().slice();
-  list.push({ id, name, category: modalSelectedCategory, steps });
+  if(existingId){
+    const idx = list.findIndex(t => t.id === existingId);
+    if(idx >= 0) list[idx] = { id: existingId, name, category: modalSelectedCategory, steps };
+  } else {
+    list.push({ id: 'tpl_' + Date.now(), name, category: modalSelectedCategory, steps });
+  }
   saveTemplates(list);
-  openAddModal();
-  setTimeout(() => pickModalTemplate(id), 100);
+  openTemplatesModal();
+}
+function deleteTemplateForm(id){
+  const list = getTemplates().filter(t => t.id !== id);
+  saveTemplates(list);
+  openTemplatesModal();
 }
 function toggleModalDay(day, el){
   if(modalSelectedDays.includes(day)){
@@ -972,7 +1105,7 @@ function openEditModal(day, idx){
   const tpl = item.templateId ? templatesCache.find(t => t.id === item.templateId) : null;
   const displayText = getDisplayText(item);
   const tplInfo = tpl
-    ? `<p class="tpl-info">🔄 Teil der Vorlage "${escapeHtml(tpl.name)}" – Schritt ${Math.min((item.stepIndex||0)+1, tpl.steps.length)}/${tpl.steps.length}. Text ändern löst die Vorlagen-Verknüpfung.</p>`
+    ? `<p class="tpl-info">Teil der Vorlage "${escapeHtml(tpl.name)}" – Schritt ${Math.min((item.stepIndex||0)+1, tpl.steps.length)}/${tpl.steps.length}. Text ändern löst die Vorlagen-Verknüpfung.</p>`
     : '';
 
   const catChips = CATEGORIES.map((c) => `
@@ -1077,6 +1210,35 @@ db.collection('wochendashboard').doc('postits').onSnapshot(doc => {
   postitsCache = (doc.exists && doc.data().data) ? doc.data().data : [];
   renderPostIts();
 }, err => console.error('Firestore-Fehler (Post-its):', err));
+
+/* ================= Notizen ================= */
+let notesCache = '';
+let notesSaveTimer = null;
+let notesFocused = false;
+
+db.collection('wochendashboard').doc('notes').onSnapshot(doc => {
+  notesCache = (doc.exists && typeof doc.data().text === 'string') ? doc.data().text : '';
+  const ta = document.getElementById('notes_textarea');
+  if(ta && !notesFocused) ta.value = notesCache;
+}, err => console.error('Firestore-Fehler (Notizen):', err));
+
+function toggleNotesPanel(){
+  const panel = document.getElementById('notes_panel');
+  panel.classList.toggle('open');
+  if(panel.classList.contains('open')){
+    document.getElementById('notes_textarea').value = notesCache;
+  }
+}
+function onNotesInput(){
+  notesFocused = true;
+  const value = document.getElementById('notes_textarea').value;
+  clearTimeout(notesSaveTimer);
+  notesSaveTimer = setTimeout(() => {
+    notesCache = value;
+    db.collection('wochendashboard').doc('notes').set({ text: value }).catch(e => console.error('Speichern fehlgeschlagen:', e));
+    notesFocused = false;
+  }, 600);
+}
 
 function addPostIt(){
   const list = getPostIts();
