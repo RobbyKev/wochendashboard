@@ -6,6 +6,8 @@
 <title>Wochenboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/12.12.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --bg: #12142b;
@@ -275,19 +277,35 @@ function dowIndex(){
   return j === 0 ? 6 : j-1;
 }
 
-/* ================= Speicher (localStorage) ================= */
+/* ================= Firebase / Firestore ================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyA9TNbN9wsAh8_5lKV7BG_yb40Dggzp9HM",
+  authDomain: "wochenplaner-d2b8a.firebaseapp.com",
+  projectId: "wochenplaner-d2b8a",
+  storageBucket: "wochenplaner-d2b8a.firebasestorage.app",
+  messagingSenderId: "928312248897",
+  appId: "1:928312248897:web:8bec731c72d7f180ed14c0"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+function freshBoard(){ const b = {}; DAYS.forEach(d=>b[d]=[]); return b; }
+let boardCache = freshBoard();
+let boardLoaded = false;
+
+/* ================= Speicher (Firestore, live-synchron) ================= */
 function getBoard(){
-  try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw) return JSON.parse(raw);
-  }catch(e){ console.error(e); }
-  const fresh = {}; DAYS.forEach(d=>fresh[d]=[]);
-  return fresh;
+  return boardCache;
 }
 function saveBoard(board){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(board)); }
-  catch(e){ console.error(e); }
+  boardCache = board;
+  db.collection('wochendashboard').doc('board').set({ data: board }).catch(e => console.error('Speichern fehlgeschlagen:', e));
 }
+db.collection('wochendashboard').doc('board').onSnapshot(doc => {
+  boardCache = (doc.exists && doc.data().data) ? doc.data().data : freshBoard();
+  boardLoaded = true;
+  renderBoard();
+}, err => console.error('Firestore-Fehler (Board):', err));
 
 /* ================= Uhr ================= */
 function tickClock(){
@@ -769,20 +787,21 @@ function submitAddModal(){
 }
 
 /* ================= Post-its ================= */
-const POSTIT_KEY = 'postits_data';
 const POSTIT_COLORS = ['#f5e6a3', '#f7c6d9', '#b9ece0', '#c9d9f7', '#f7d9b9'];
 
+let postitsCache = [];
+
 function getPostIts(){
-  try{
-    const raw = localStorage.getItem(POSTIT_KEY);
-    if(raw) return JSON.parse(raw);
-  }catch(e){ console.error(e); }
-  return [];
+  return postitsCache;
 }
 function savePostIts(list){
-  try{ localStorage.setItem(POSTIT_KEY, JSON.stringify(list)); }
-  catch(e){ console.error(e); }
+  postitsCache = list;
+  db.collection('wochendashboard').doc('postits').set({ data: list }).catch(e => console.error('Speichern fehlgeschlagen:', e));
 }
+db.collection('wochendashboard').doc('postits').onSnapshot(doc => {
+  postitsCache = (doc.exists && doc.data().data) ? doc.data().data : [];
+  renderPostIts();
+}, err => console.error('Firestore-Fehler (Post-its):', err));
 
 function addPostIt(){
   const list = getPostIts();
