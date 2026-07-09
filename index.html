@@ -22,6 +22,7 @@
     --purple: #a78bfa;
     --line: rgba(255,255,255,0.07);
     --item-font-size: 11.5px;
+    --now-color: #ff6b6b;
   }
   *{box-sizing:border-box;}
   html,body{
@@ -98,6 +99,16 @@
   .day-header.today{ color:var(--blue); }
   .time-group-section{ min-height:6px; }
   .time-group-items{ display:flex; flex-direction:column; gap:5px; }
+  .untimed-spacer{ height:1px; margin:4px 4px 3px; border-top:1px dashed var(--line); }
+  .now-line{
+    display:flex; align-items:center; gap:6px; margin:3px 2px;
+  }
+  .now-line::before{
+    content:''; width:6px; height:6px; border-radius:50%; background:var(--now-color); flex-shrink:0;
+  }
+  .now-line::after{
+    content:''; flex:1; height:1px; background:var(--now-color); opacity:0.5;
+  }
   .no-group-items{ display:flex; flex-direction:column; gap:5px; margin-top:4px; }
   .time-group-label{
     font-size:9px; font-weight:700; color:var(--text-dim); text-transform:uppercase;
@@ -194,6 +205,11 @@
     background:var(--blue); color:#0d0f22; border:none; border-radius:10px; padding:12px 20px;
     cursor:pointer; font-size:15px; font-weight:700; width:100%; margin-top:6px;
   }
+  .modal-delete{
+    background:transparent; color:#ff6b6b; border:1px solid rgba(255,107,107,0.4); border-radius:10px; padding:11px 20px;
+    cursor:pointer; font-size:14px; font-weight:600; width:100%; margin-top:10px;
+  }
+  .modal-delete:hover{ background:rgba(255,107,107,0.1); }
 
   /* Post-its */
   .postit-fab{
@@ -498,6 +514,8 @@ function renderBoard(){
   const board = getBoard();
   const todayIdx = dowIndex();
   const todayKey = DAYS[todayIdx];
+  const nowStr = new Date().toTimeString().slice(0,5);
+  const currentPeriod = getTimeGroup(nowStr);
 
   const html = DAYS.map((day, i) => {
     const rawItems = board[day] || [];
@@ -516,8 +534,24 @@ function renderBoard(){
 
       const timed = inGroup.filter(it => it.time);
       const untimed = inGroup.filter(it => !it.time);
-      const ordered = timed.concat(untimed);
-      const itemsHtml = ordered.map(obj => renderItemHtml(obj, day)).join('');
+
+      let timedHtml = '';
+      const showNowLine = (i === todayIdx) && currentPeriod && currentPeriod.key === g.key;
+      let nowLineInserted = false;
+      timed.forEach(obj => {
+        if(showNowLine && !nowLineInserted && obj.time > nowStr){
+          timedHtml += `<div class="now-line"></div>`;
+          nowLineInserted = true;
+        }
+        timedHtml += renderItemHtml(obj, day);
+      });
+      if(showNowLine && !nowLineInserted){
+        timedHtml += `<div class="now-line"></div>`;
+      }
+
+      const untimedHtml = untimed.map(obj => renderItemHtml(obj, day)).join('');
+      const spacer = (timed.length > 0 && untimed.length > 0) ? `<div class="untimed-spacer"></div>` : '';
+      const itemsHtml = timedHtml + spacer + untimedHtml;
 
       sectionsHtml += `
         <div class="time-group-section" data-day="${day}" data-group="${g.key}"
@@ -583,7 +617,7 @@ function renderItemHtml(obj, day){
       ondragstart="onDragStart(event)" ondragend="onDragEnd(event)"
       ondragover="onItemDragOver(event)" ondrop="onItemDrop(event, '${day}', ${obj.origIdx}, '${effKey}')"
       onclick="handleItemTap(event, '${day}', ${obj.origIdx})">
-      ${prioDot}${recurLabel}${timeLabel}${escapeHtml(obj.text)}<span class="del" onclick="event.stopPropagation(); deleteBoardItem('${day}', ${obj.origIdx})">✕</span>
+      ${prioDot}${recurLabel}${timeLabel}${escapeHtml(obj.text)}<span class="del" onclick="event.stopPropagation(); openEditModal('${day}', ${obj.origIdx})">✎</span>
     </div>
   `;
 }
@@ -671,6 +705,7 @@ function deleteBoardItem(day, idx){
 let modalSelectedDays = [];
 let modalSelectedCategory = CATEGORIES[0].key;
 let modalSelectedPriority = null;
+let modalSelectedPeriod = null;
 const PRIORITIES = [
   {key:'high', label:'Hoch'},
   {key:'medium', label:'Mittel'},
@@ -681,6 +716,7 @@ function openAddModal(){
   modalSelectedDays = [DAYS[dowIndex()]];
   modalSelectedCategory = CATEGORIES[0].key;
   modalSelectedPriority = null;
+  modalSelectedPeriod = null;
 
   const dayChips = DAYS.map(d => `
     <div class="day-chip ${modalSelectedDays.includes(d) ? 'selected' : ''}" data-day="${d}" onclick="toggleModalDay('${d}', this)">${d}</div>
@@ -694,6 +730,9 @@ function openAddModal(){
     <div class="prio-chip" data-key="${p.key}" onclick="pickModalPriority('${p.key}', this)">
       <span class="prio-dot ${p.key}"></span>${p.label}
     </div>
+  `).join('');
+  const periodChips = TIME_GROUPS.filter(g => g.always).map(g => `
+    <div class="day-chip" data-key="${g.key}" onclick="pickModalPeriod('${g.key}', this)">${g.label}</div>
   `).join('');
 
   openModal(`
@@ -711,6 +750,10 @@ function openAddModal(){
       <input type="time" class="modal-input" id="modal_time">
     </div>
     <div class="modal-field">
+      <label>Tageszeit (optional, unabhängig von Uhrzeit)</label>
+      <div class="day-chip-picker" id="modal_period_picker">${periodChips}</div>
+    </div>
+    <div class="modal-field">
       <label>Kategorie</label>
       <div class="cat-picker" id="modal_cat_picker">${catChips}</div>
     </div>
@@ -724,6 +767,16 @@ function openAddModal(){
     <button class="modal-submit" onclick="submitAddModal()">Hinzufügen</button>
   `);
   setTimeout(() => { const el = document.getElementById('modal_text'); if(el) el.focus(); }, 50);
+}
+function pickModalPeriod(key, el){
+  if(modalSelectedPeriod === key){
+    modalSelectedPeriod = null;
+    el.classList.remove('selected');
+  } else {
+    modalSelectedPeriod = key;
+    document.querySelectorAll('#modal_period_picker .day-chip').forEach(chip => chip.classList.remove('selected'));
+    el.classList.add('selected');
+  }
 }
 function toggleModalDay(day, el){
   if(modalSelectedDays.includes(day)){
@@ -779,11 +832,99 @@ function submitAddModal(){
   const recurring = recurEl.checked;
   const board = getBoard();
   modalSelectedDays.forEach(day => {
-    insertSorted(board[day], {text, time, category: modalSelectedCategory, recurring, priority: modalSelectedPriority, done: false});
+    insertSorted(board[day], {text, time, category: modalSelectedCategory, recurring, priority: modalSelectedPriority, period: modalSelectedPeriod, done: false});
   });
   saveBoard(board);
   closeModal();
   renderBoard();
+}
+
+/* ================= Editier-Modal ================= */
+let editDay = null;
+let editIdx = null;
+
+function openEditModal(day, idx){
+  const board = getBoard();
+  const raw = board[day][idx];
+  const item = (typeof raw === 'string') ? {text: raw} : raw;
+  editDay = day;
+  editIdx = idx;
+  modalSelectedCategory = item.category || CATEGORIES[0].key;
+  modalSelectedPriority = item.priority || null;
+  modalSelectedPeriod = item.period || null;
+
+  const catChips = CATEGORIES.map((c) => `
+    <div class="cat-chip ${c.key === modalSelectedCategory ? 'selected' : ''}"
+      style="${c.key === modalSelectedCategory ? `background:var(--${c.color});color:#0d0f22;` : `color:var(--${c.color});`} border-color:var(--${c.color});"
+      data-key="${c.key}" onclick="pickModalCategory('${c.key}', this)">${c.label}</div>
+  `).join('');
+  const prioChips = PRIORITIES.map(p => `
+    <div class="prio-chip ${p.key === modalSelectedPriority ? 'selected' : ''}" data-key="${p.key}" onclick="pickModalPriority('${p.key}', this)">
+      <span class="prio-dot ${p.key}"></span>${p.label}
+    </div>
+  `).join('');
+  const periodChips = TIME_GROUPS.filter(g => g.always).map(g => `
+    <div class="day-chip ${g.key === modalSelectedPeriod ? 'selected' : ''}" data-key="${g.key}" onclick="pickModalPeriod('${g.key}', this)">${g.label}</div>
+  `).join('');
+
+  openModal(`
+    <h2>Eintrag bearbeiten</h2>
+    <div class="modal-field">
+      <label>Was steht an?</label>
+      <input type="text" class="modal-input" id="modal_text" value="${escapeHtml(item.text || '')}">
+    </div>
+    <div class="modal-field">
+      <label>Uhrzeit (optional)</label>
+      <input type="time" class="modal-input" id="modal_time" value="${item.time || ''}">
+    </div>
+    <div class="modal-field">
+      <label>Tageszeit (optional, unabhängig von Uhrzeit)</label>
+      <div class="day-chip-picker" id="modal_period_picker">${periodChips}</div>
+    </div>
+    <div class="modal-field">
+      <label>Kategorie</label>
+      <div class="cat-picker" id="modal_cat_picker">${catChips}</div>
+    </div>
+    <div class="modal-field">
+      <label>Dringlichkeit (optional)</label>
+      <div class="prio-picker" id="modal_prio_picker">${prioChips}</div>
+    </div>
+    <div class="modal-field">
+      <label class="recur-toggle"><input type="checkbox" id="modal_recurring" ${item.recurring ? 'checked' : ''}> Wiederkehrend (nur Symbol, ändert das Verhalten aktuell nicht)</label>
+    </div>
+    <button class="modal-submit" onclick="submitEditModal()">Speichern</button>
+    <button class="modal-delete" onclick="deleteFromEditModal()">Löschen</button>
+  `);
+  setTimeout(() => { const el = document.getElementById('modal_text'); if(el) el.focus(); }, 50);
+}
+function submitEditModal(){
+  const textEl = document.getElementById('modal_text');
+  const timeEl = document.getElementById('modal_time');
+  const recurEl = document.getElementById('modal_recurring');
+  const text = textEl.value.trim();
+  if(!text || editDay === null) return;
+  const board = getBoard();
+  const existing = board[editDay][editIdx];
+  const done = (typeof existing === 'object' && existing.done) ? existing.done : false;
+  board[editDay][editIdx] = {
+    text,
+    time: timeEl.value || '',
+    category: modalSelectedCategory,
+    priority: modalSelectedPriority,
+    period: modalSelectedPeriod,
+    recurring: recurEl.checked,
+    done
+  };
+  saveBoard(board);
+  editDay = null; editIdx = null;
+  closeModal();
+  renderBoard();
+}
+function deleteFromEditModal(){
+  if(editDay === null) return;
+  deleteBoardItem(editDay, editIdx);
+  editDay = null; editIdx = null;
+  closeModal();
 }
 
 /* ================= Post-its ================= */
