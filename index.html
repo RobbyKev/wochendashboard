@@ -220,7 +220,13 @@
     min-width:18px; height:18px; border-radius:9px; display:flex; align-items:center; justify-content:center;
     padding:0 4px; border:2px solid var(--bg);
   }
-  .unplanned-list-item{ margin-bottom:8px; }
+  .unplanned-row{
+    margin-bottom:10px; padding-right:46px !important; font-size:14px !important;
+  }
+  .unplanned-assign{
+    position:absolute; top:6px; right:24px; color:var(--blue); font-size:16px; font-weight:800;
+    cursor:pointer; padding:3px 6px; line-height:1;
+  }
   .tpl-corner-btn{
     position:absolute; top:16px; right:60px; width:32px; height:32px; border-radius:50%;
     background:#6983b8; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center;
@@ -289,6 +295,7 @@
   .item-time{ font-weight:700; color:var(--text-dim); font-size:10.5px; margin-right:5px; }
   .list-item.done{ text-decoration:line-through; opacity:0.65; }
   .list-item.prio-high-outline{ box-shadow:0 0 0 1.5px #ff6b6b inset; }
+  .list-item.cat-termine-outline{ box-shadow:0 0 0 1.5px var(--sky) inset; }
   .prio-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:middle; }
   .prio-dot.high{ background:#ff6b6b; }
   .prio-dot.medium{ background:#ffd93d; }
@@ -314,8 +321,10 @@
 
   /* Overlay/Modal */
   .overlay{ position:fixed; inset:0; background:rgba(10,11,25,0.75); backdrop-filter: blur(3px);
-    display:none; align-items:center; justify-content:center; z-index:50; padding:20px;}
+    display:none; align-items:center; justify-content:center; z-index:50; padding:20px;
+    transition:opacity 0.15s ease;}
   .overlay.open{ display:flex; }
+  .overlay.drag-fade{ opacity:0.1; pointer-events:none; }
   .modal{ background:var(--card); border:1px solid var(--line); border-radius:20px; max-width:520px; width:100%;
     max-height:85vh; overflow-y:auto; padding:24px 26px; position:relative; box-shadow:0 20px 60px rgba(0,0,0,0.4); }
   .modal h2{ font-size:19px; font-weight:800; margin:0; }
@@ -950,14 +959,64 @@ function openUnplannedModal(){
     return Object.assign({}, obj, {origIdx});
   });
   const itemsHtml = items.length
-    ? items.map(obj => `<div class="unplanned-list-item">${renderItemHtml(obj, 'unplanned')}</div>`).join('')
+    ? items.map(obj => renderUnplannedRow(obj)).join('')
     : '<p class="muted-note">Nichts zu verplanen – alles erledigt oder eingeteilt.</p>';
+  const clearBtn = items.length
+    ? `<button class="modal-delete" style="margin-top:14px;" onclick="clearAllUnplanned()">Alles löschen</button>`
+    : '';
 
   openModal(`
     <h2>Zu verplanen</h2>
-    <p style="color:var(--text-dim); font-size:13px; margin:6px 0 16px;">Zieh einen Zettel auf einen Tag im Hintergrund – das Fenster blendet sich dafür kurz aus.</p>
+    <p style="color:var(--text-dim); font-size:13px; margin:6px 0 16px;">Antippe das +, um einen Tag auszuwählen.</p>
     <div id="unplanned_list">${itemsHtml}</div>
+    ${clearBtn}
   `);
+}
+function renderUnplannedRow(obj){
+  const cat = catByKey(obj.category);
+  const borderColor = cat ? `var(--${cat.color})` : 'var(--blue)';
+  const timeLabel = obj.time ? `<span class="item-time">${obj.time}</span>` : '';
+  const recurLabel = obj.recurring ? `<span class="recur-icon">🔁</span>` : '';
+  const prioDot = obj.priority ? `<span class="prio-dot ${obj.priority}"></span>` : '';
+  const tplLabel = obj.templateId ? `<span class="tpl-icon">${REPEAT_ICON_SVG}</span>` : '';
+  const displayText = getDisplayText(obj);
+  return `
+    <div class="list-item unplanned-row" style="border-left-color:${borderColor}">
+      ${prioDot}${recurLabel}${tplLabel}${timeLabel}${escapeHtml(displayText)}
+      <span class="unplanned-assign" onclick="openUnplannedDayPicker(${obj.origIdx})">+</span>
+      <span class="del" onclick="deleteUnplannedItem(${obj.origIdx})">✕</span>
+    </div>
+  `;
+}
+function openUnplannedDayPicker(idx){
+  const dayChips = DAYS.map(d => `
+    <div class="day-chip" onclick="moveUnplannedToDay(${idx}, '${d}')">${d}</div>
+  `).join('');
+  openModal(`
+    <h2>Auf welchen Tag?</h2>
+    <div class="day-chip-picker" style="margin-top:16px;">${dayChips}</div>
+    <button class="tpl-back" onclick="openUnplannedModal()">← Zurück</button>
+  `);
+}
+function moveUnplannedToDay(idx, targetDay){
+  const board = ensureUnplanned(getBoard());
+  const [moved] = board.unplanned.splice(idx, 1);
+  board[targetDay] = board[targetDay] || [];
+  insertSorted(board[targetDay], moved);
+  saveBoard(board);
+  openUnplannedModal();
+}
+function deleteUnplannedItem(idx){
+  const board = ensureUnplanned(getBoard());
+  board.unplanned.splice(idx, 1);
+  saveBoard(board);
+  openUnplannedModal();
+}
+function clearAllUnplanned(){
+  const board = ensureUnplanned(getBoard());
+  board.unplanned = [];
+  saveBoard(board);
+  closeModal();
 }
 
 function getDisplayText(obj){
@@ -981,7 +1040,9 @@ function renderItemHtml(obj, day){
   const eff = getEffectiveGroup(obj);
   const effKey = eff ? eff.key : '';
   const displayText = getDisplayText(obj);
-  const highClass = (obj.priority === 'high' && !obj.done) ? 'prio-high-outline' : '';
+  const highClass = (obj.priority === 'high' && !obj.done)
+    ? 'prio-high-outline'
+    : (obj.category === 'termine' && !obj.done) ? 'cat-termine-outline' : '';
   return `
     <div class="list-item ${obj.done ? 'done' : ''} ${highClass}" style="border-left-color:${borderColor}" draggable="true"
       data-day="${day}" data-idx="${obj.origIdx}"
@@ -1037,16 +1098,19 @@ function onDragStart(e){
   e.currentTarget.classList.add('dragging');
   if(dragSrc.day === 'unplanned'){
     draggingFromUnplanned = true;
-    document.getElementById('overlay').classList.remove('open');
+    document.getElementById('overlay').classList.add('drag-fade');
   }
 }
 function onDragEnd(e){
   e.currentTarget.classList.remove('dragging');
   if(draggingFromUnplanned){
     draggingFromUnplanned = false;
+    document.getElementById('overlay').classList.remove('drag-fade');
     const board = ensureUnplanned(getBoard());
     if(board.unplanned.length > 0){
       openUnplannedModal();
+    } else {
+      closeModal();
     }
   }
 }
