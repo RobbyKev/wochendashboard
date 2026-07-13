@@ -208,6 +208,19 @@
     box-shadow:0 4px 14px rgba(91,141,239,0.35); flex-shrink:0;
   }
   .add-fab:hover{ filter:brightness(1.08); }
+  .unplanned-fab{
+    position:relative; width:44px; height:44px; border-radius:50%; background:var(--purple); color:#0d0f22;
+    border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    box-shadow:0 4px 14px rgba(167,139,250,0.35);
+  }
+  .unplanned-fab:hover{ filter:brightness(1.08); }
+  .unplanned-fab svg{ width:20px; height:20px; }
+  .unplanned-badge{
+    position:absolute; top:-4px; right:-4px; background:#ff6b6b; color:#fff; font-size:10.5px; font-weight:800;
+    min-width:18px; height:18px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+    padding:0 4px; border:2px solid var(--bg);
+  }
+  .unplanned-list-item{ margin-bottom:8px; }
   .tpl-corner-btn{
     position:absolute; top:16px; right:60px; width:32px; height:32px; border-radius:50%;
     background:#6983b8; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center;
@@ -478,6 +491,10 @@
     <span class="progress-label">erledigt</span>
   </div>
   <button class="add-fab" onclick="openAddModal()">+</button>
+  <button class="unplanned-fab" id="unplanned_fab" onclick="openUnplannedModal()" title="Zu verplanen">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+    <span class="unplanned-badge" id="unplanned_badge" style="display:none;">0</span>
+  </button>
   <div class="header-actions">
     <div class="clock" id="clock" onclick="openMonthView()">--:--</div>
   </div>
@@ -537,7 +554,8 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-function freshBoard(){ const b = {}; DAYS.forEach(d=>b[d]=[]); return b; }
+function freshBoard(){ const b = {}; DAYS.forEach(d=>b[d]=[]); b.unplanned = []; return b; }
+function ensureUnplanned(board){ if(!board.unplanned) board.unplanned = []; return board; }
 let boardCache = freshBoard();
 let boardLoaded = false;
 
@@ -551,9 +569,47 @@ function saveBoard(board){
 }
 db.collection('wochendashboard').doc('board').onSnapshot(doc => {
   boardCache = (doc.exists && doc.data().data) ? doc.data().data : freshBoard();
+  ensureUnplanned(boardCache);
+  checkWeekRollover();
   boardLoaded = true;
   renderBoard();
 }, err => console.error('Firestore-Fehler (Board):', err));
+
+/* ================= Wochenwechsel ================= */
+const WEEK_KEY = 'lastSeenWeek';
+function getMondayKey(d){
+  const date = new Date(d);
+  const day = (date.getDay() + 6) % 7; // Mo=0
+  date.setDate(date.getDate() - day);
+  date.setHours(0,0,0,0);
+  return date.toISOString().slice(0,10);
+}
+function checkWeekRollover(){
+  const currentMonday = getMondayKey(new Date());
+  const lastSeen = localStorage.getItem(WEEK_KEY);
+  if(lastSeen === currentMonday) return; // gleiche Woche, nichts zu tun
+  localStorage.setItem(WEEK_KEY, currentMonday);
+  if(!lastSeen) return; // allererster Besuch, kein Wechsel, nur merken
+
+  const board = ensureUnplanned(boardCache);
+  let changed = false;
+  DAYS.forEach(day => {
+    const items = board[day] || [];
+    const stillOpen = items.filter(it => {
+      const obj = (typeof it === 'string') ? {text: it} : it;
+      return !obj.done;
+    });
+    const movedCount = items.length - stillOpen.length; // erledigte, die rausfliegen
+    if(items.length > 0){
+      changed = true;
+      board.unplanned = board.unplanned.concat(stillOpen);
+      board[day] = [];
+    }
+  });
+  if(changed){
+    saveBoard(board);
+  }
+}
 
 /* ================= Vorlagen ================= */
 const DEFAULT_TEMPLATES = [
@@ -853,6 +909,7 @@ function renderBoard(){
   const todayItems = board[todayKey] || [];
   const todayDone = todayItems.filter(it => typeof it === 'object' && it.done).length;
   updateProgress(todayItems.length, todayDone);
+  updateUnplannedBadge();
 }
 function onGroupDragOver(e){ e.preventDefault(); e.stopPropagation(); }
 function onGroupDrop(e, targetDay, groupKey){
@@ -873,6 +930,34 @@ function updateProgress(total, done){
   if(!numEl || !barEl) return;
   numEl.textContent = `${done}/${total}`;
   barEl.style.width = total === 0 ? '0%' : Math.round((done/total)*100) + '%';
+}
+function updateUnplannedBadge(){
+  const board = ensureUnplanned(getBoard());
+  const count = board.unplanned.length;
+  const badge = document.getElementById('unplanned_badge');
+  if(!badge) return;
+  if(count > 0){
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+function openUnplannedModal(){
+  const board = ensureUnplanned(getBoard());
+  const items = board.unplanned.map((it, origIdx) => {
+    const obj = (typeof it === 'string') ? {text: it} : it;
+    return Object.assign({}, obj, {origIdx});
+  });
+  const itemsHtml = items.length
+    ? items.map(obj => `<div class="unplanned-list-item">${renderItemHtml(obj, 'unplanned')}</div>`).join('')
+    : '<p class="muted-note">Nichts zu verplanen – alles erledigt oder eingeteilt.</p>';
+
+  openModal(`
+    <h2>Zu verplanen</h2>
+    <p style="color:var(--text-dim); font-size:13px; margin:6px 0 16px;">Zieh einen Zettel auf einen Tag im Hintergrund – das Fenster blendet sich dafür kurz aus.</p>
+    <div id="unplanned_list">${itemsHtml}</div>
+  `);
 }
 
 function getDisplayText(obj){
@@ -946,11 +1031,25 @@ function escapeHtml(str){
   return div.innerHTML;
 }
 
+let draggingFromUnplanned = false;
 function onDragStart(e){
   dragSrc = { day: e.currentTarget.dataset.day, idx: parseInt(e.currentTarget.dataset.idx, 10) };
   e.currentTarget.classList.add('dragging');
+  if(dragSrc.day === 'unplanned'){
+    draggingFromUnplanned = true;
+    document.getElementById('overlay').classList.remove('open');
+  }
 }
-function onDragEnd(e){ e.currentTarget.classList.remove('dragging'); }
+function onDragEnd(e){
+  e.currentTarget.classList.remove('dragging');
+  if(draggingFromUnplanned){
+    draggingFromUnplanned = false;
+    const board = ensureUnplanned(getBoard());
+    if(board.unplanned.length > 0){
+      openUnplannedModal();
+    }
+  }
+}
 function onDragOver(e){ e.preventDefault(); e.currentTarget.classList.add('dragover'); }
 function onDragLeave(e){ e.currentTarget.classList.remove('dragover'); }
 function onDrop(e){
