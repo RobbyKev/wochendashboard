@@ -296,6 +296,7 @@
   .list-item.done{ text-decoration:line-through; opacity:0.65; }
   .list-item.prio-high-outline{ box-shadow:0 0 0 1.5px #ff6b6b inset; }
   .list-item.cat-termine-outline{ box-shadow:0 0 0 1.5px var(--sky) inset; }
+  .list-item.cat-pause-outline{ box-shadow:0 0 0 1.5px var(--teal) inset; }
   .prio-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:middle; }
   .prio-dot.high{ background:#ff6b6b; }
   .prio-dot.medium{ background:#ffd93d; }
@@ -1042,7 +1043,8 @@ function renderItemHtml(obj, day){
   const displayText = getDisplayText(obj);
   const highClass = (obj.priority === 'high' && !obj.done)
     ? 'prio-high-outline'
-    : (obj.category === 'termine' && !obj.done) ? 'cat-termine-outline' : '';
+    : (obj.category === 'termine' && !obj.done) ? 'cat-termine-outline'
+    : (obj.category === 'pause' && !obj.done) ? 'cat-pause-outline' : '';
   return `
     <div class="list-item ${obj.done ? 'done' : ''} ${highClass}" style="border-left-color:${borderColor}" draggable="true"
       data-day="${day}" data-idx="${obj.origIdx}"
