@@ -348,12 +348,15 @@
   .hourly-item{ flex:0 0 auto; text-align:center; font-size:12.5px; color:var(--text-dim); }
   .hourly-item .h-time{ font-weight:600; margin-bottom:4px; }
   .hourly-item .h-temp{ font-weight:800; font-size:15px; color:var(--text); margin-top:4px; }
-  .daily-row{ display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px;}
+  .daily-row{ display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px;}
   .daily-row:last-child{ border-bottom:none; }
-  .daily-name{ font-weight:700; width:44px; }
-  .daily-bar{ flex:1; margin:0 12px; height:4px; background:var(--line); border-radius:2px; position:relative; align-self:center;}
-  .daily-bar-fill{ position:absolute; height:100%; border-radius:2px; background:var(--amber); }
-  .daily-range{ font-weight:600; width:80px; text-align:right; }
+  .daily-name{ font-weight:700; width:36px; flex-shrink:0; }
+  .daily-icon-wrap-col{ display:flex; flex-direction:column; align-items:center; flex-shrink:0; width:22px; }
+  .daily-pop{ font-size:9.5px; color:var(--sky); font-weight:700; margin-top:1px; white-space:nowrap; }
+  .daily-temp-min{ font-weight:600; color:var(--text-dim); width:28px; text-align:right; flex-shrink:0; }
+  .daily-bar{ flex:1; margin:0 4px; height:4px; background:var(--line); border-radius:2px; position:relative; align-self:center;}
+  .daily-bar-fill{ position:absolute; height:100%; border-radius:2px; }
+  .daily-temp-max{ font-weight:700; width:32px; text-align:left; flex-shrink:0; }
 
   /* Monatskalender */
   .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-top:14px; }
@@ -722,6 +725,26 @@ function renderWeatherTile(){
   const slot = document.getElementById('weather_icon_slot');
   if(slot) slot.innerHTML = animatedWeatherIcon(weatherData.current.weather_code);
 }
+const TEMP_COLOR_STOPS = [
+  {t: 0,  c: [56, 189, 248]},  // Himmelblau (kalt)
+  {t: 15, c: [107, 203, 119]}, // Grün (mild)
+  {t: 22, c: [245, 166, 35]},  // Amber (warm)
+  {t: 30, c: [255, 107, 107]}  // Rot (heiß)
+];
+function tempToColor(temp){
+  const stops = TEMP_COLOR_STOPS;
+  if(temp <= stops[0].t) return `rgb(${stops[0].c.join(',')})`;
+  if(temp >= stops[stops.length-1].t) return `rgb(${stops[stops.length-1].c.join(',')})`;
+  for(let i = 0; i < stops.length - 1; i++){
+    const a = stops[i], b = stops[i+1];
+    if(temp >= a.t && temp <= b.t){
+      const ratio = (temp - a.t) / (b.t - a.t);
+      const c = a.c.map((v, idx) => Math.round(v + (b.c[idx] - v) * ratio));
+      return `rgb(${c.join(',')})`;
+    }
+  }
+  return `rgb(${stops[stops.length-1].c.join(',')})`;
+}
 function weatherIconType(code){
   if(code === 0 || code === 1) return 'sunny';
   if(code === 2) return 'cloudy';
@@ -778,12 +801,19 @@ function openWeatherView(){
     const tmin = Math.round(weatherData.daily.temperature_2m_min[i]);
     const leftPct = ((tmin - globalMin) / (globalMax - globalMin)) * 100;
     const widthPct = ((tmax - tmin) / (globalMax - globalMin)) * 100;
+    const gradient = `linear-gradient(to right, ${tempToColor(tmin)}, ${tempToColor(tmax)})`;
+    const pop = weatherData.daily.precipitation_probability_max ? weatherData.daily.precipitation_probability_max[i] : 0;
+    const popLabel = pop > 15 ? `<div class="daily-pop">💧${pop}%</div>` : '';
     return `
       <div class="daily-row">
         <span class="daily-name">${dayName}</span>
-        <div class="daily-icon-wrap">${animatedWeatherIcon(weatherData.daily.weather_code[i])}</div>
-        <div class="daily-bar"><div class="daily-bar-fill" style="left:${leftPct}%; width:${widthPct}%;"></div></div>
-        <span class="daily-range">${tmax}° / ${tmin}°</span>
+        <div class="daily-icon-wrap-col">
+          <div class="daily-icon-wrap">${animatedWeatherIcon(weatherData.daily.weather_code[i])}</div>
+          ${popLabel}
+        </div>
+        <span class="daily-temp-min">${tmin}°</span>
+        <div class="daily-bar"><div class="daily-bar-fill" style="left:${leftPct}%; width:${widthPct}%; background:${gradient};"></div></div>
+        <span class="daily-temp-max">${tmax}°</span>
       </div>
     `;
   }).join('');
