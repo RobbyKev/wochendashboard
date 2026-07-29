@@ -321,9 +321,15 @@
   .day-col{
     background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:8px 6px;
     display:flex; flex-direction:column; gap:5px; min-height:140px;
+    transition:opacity 0.3s ease, transform 0.3s ease;
   }
-  .day-col.today{ border-color:var(--blue); box-shadow:0 0 0 1px var(--blue) inset; }
-  .day-col.dragover{ border-color:var(--pink); background:var(--card-hi); }
+  .day-col.today{
+    border-color:var(--blue); box-shadow:0 0 0 1px var(--blue) inset, 0 6px 18px rgba(91,141,239,0.25);
+    opacity:1; transform:scale(1.035); z-index:2; position:relative;
+  }
+  .day-col.day-future{ opacity:0.78; }
+  .day-col.day-past{ opacity:0.45; }
+  .day-col.dragover{ border-color:var(--pink); background:var(--card-hi); opacity:1; }
   .day-header{
     text-align:center; font-size:12px; font-weight:700; color:var(--text-dim);
     text-transform:uppercase; letter-spacing:0.05em; padding-bottom:6px; border-bottom:1px solid var(--line); margin-bottom:2px;
@@ -698,7 +704,6 @@ db.collection('wochendashboard').doc('board').onSnapshot(doc => {
 }, err => console.error('Firestore-Fehler (Board):', err));
 
 /* ================= Wochenwechsel ================= */
-const WEEK_KEY = 'lastSeenWeek';
 function getMondayKey(d){
   const date = new Date(d);
   const day = (date.getDay() + 6) % 7; // Mo=0
@@ -710,12 +715,17 @@ function getMondayKey(d){
 }
 function checkWeekRollover(){
   const currentMonday = getMondayKey(new Date());
-  const lastSeen = localStorage.getItem(WEEK_KEY);
-  if(lastSeen === currentMonday) return; // gleiche Woche, nichts zu tun
-  localStorage.setItem(WEEK_KEY, currentMonday);
-  if(!lastSeen) return; // allererster Besuch, kein Wechsel, nur merken
-
   const board = ensureUnplanned(boardCache);
+  const lastSeen = board.weekKey || null;
+  if(lastSeen === currentMonday) return; // gleiche Woche (für alle Geräte gemeinsam), nichts zu tun
+
+  if(!lastSeen){
+    // allererster Rollover-Check überhaupt (Board hat noch keinen weekKey) -> nur merken, nichts verschieben
+    board.weekKey = currentMonday;
+    saveBoard(board);
+    return;
+  }
+
   let changed = false;
   DAYS.forEach(day => {
     const items = board[day] || [];
@@ -723,16 +733,14 @@ function checkWeekRollover(){
       const obj = (typeof it === 'string') ? {text: it} : it;
       return !obj.done;
     });
-    const movedCount = items.length - stillOpen.length; // erledigte, die rausfliegen
     if(items.length > 0){
       changed = true;
       board.unplanned = board.unplanned.concat(stillOpen);
       board[day] = [];
     }
   });
-  if(changed){
-    saveBoard(board);
-  }
+  board.weekKey = currentMonday;
+  saveBoard(board);
 }
 
 /* ================= Vorlagen ================= */
@@ -1158,8 +1166,9 @@ function renderBoard(){
       sectionsHtml += `<div class="no-group-items">${noGroupItems.map(obj => renderItemHtml(obj, day)).join('')}</div>`;
     }
 
+    const dayRelClass = i === todayIdx ? 'today' : (i < todayIdx ? 'day-past' : 'day-future');
     return `
-      <div class="day-col ${i === todayIdx ? 'today' : ''}" data-day="${day}"
+      <div class="day-col ${dayRelClass}" data-day="${day}"
         ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
         <div class="day-header ${i === todayIdx ? 'today' : ''}">${DAY_FULL[i].slice(0,2)}</div>
         ${sectionsHtml}
