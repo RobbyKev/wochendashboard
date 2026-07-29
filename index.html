@@ -22,6 +22,7 @@
     --purple: #a78bfa;
     --sky: #38bdf8;
     --brown: #b08968;
+    --grey: #9098b0;
     --line: rgba(255,255,255,0.07);
     --item-font-size: 11.5px;
     --now-color: #ff6b6b;
@@ -662,7 +663,10 @@ const CATEGORIES = [
   {key:'garten', label:'Garten', color:'amber'},
   {key:'theo', label:'Theo', color:'brown'},
   {key:'termine', label:'Termine', color:'sky'},
-  {key:'pause', label:'Pause', color:'teal'}
+  {key:'pause', label:'Pause', color:'teal'},
+  {key:'projekte', label:'Projekte', color:'pink'},
+  {key:'routine', label:'Routine', color:'purple'},
+  {key:'sonstiges', label:'Sonstiges', color:'grey'}
 ];
 function catByKey(key){ return CATEGORIES.find(c=>c.key===key) || null; }
 function dowIndex(){
@@ -830,6 +834,23 @@ function playBeep(){
     gain.connect(audioCtx.destination);
     osc.start(now + offset);
     osc.stop(now + offset + 0.3);
+  });
+}
+function playCheckSound(){
+  if(!audioCtx) return;
+  const now = audioCtx.currentTime;
+  [ {f:520, t:0}, {f:780, t:0.07} ].forEach(({f,t}) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = f;
+    gain.gain.setValueAtTime(0.0001, now + t);
+    gain.gain.exponentialRampToValueAtTime(0.15, now + t + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.13);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now + t);
+    osc.stop(now + t + 0.15);
   });
 }
 function formatTimer(sec){
@@ -1335,6 +1356,7 @@ function toggleDone(day, idx){
     item = {text: item};
     board[day][idx] = item;
   }
+  const wasDone = !!item.done;
   const tpl = item.templateId ? templatesCache.find(t => t.id === item.templateId) : null;
   if(tpl){
     if(item.done){
@@ -1346,6 +1368,10 @@ function toggleDone(day, idx){
     }
   } else {
     item.done = !item.done;
+  }
+  if(!wasDone && item.done){
+    unlockAudio();
+    playCheckSound();
   }
   saveBoard(board);
   renderBoard();
