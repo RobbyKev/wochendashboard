@@ -553,6 +553,13 @@
   }
   .notes-fab:hover{ filter:brightness(1.08); }
   .notes-fab svg{ width:22px; height:22px; }
+  .todo-fab{
+    position:fixed; bottom:26px; left:88px; width:52px; height:52px; border-radius:50%;
+    background:var(--teal); color:#062b24; border:none; cursor:pointer;
+    box-shadow:0 4px 14px rgba(34,211,182,0.4); z-index:40; display:flex; align-items:center; justify-content:center;
+  }
+  .todo-fab:hover{ filter:brightness(1.08); }
+  .todo-fab svg{ width:22px; height:22px; }
   .notes-panel{
     position:fixed; bottom:90px; left:26px; width:300px; max-width:calc(100vw - 52px);
     height:340px; background:var(--card); border:1px solid var(--line); border-radius:16px;
@@ -659,6 +666,10 @@
 <button class="notes-fab" onclick="toggleNotesPanel()">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5M6 3h8l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>
 </button>
+<button class="todo-fab" onclick="openTodoModal()" title="ToDo">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><path d="M5.5 6.5 6.5 7.5 8.5 5.5"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M5.5 17.5 6.5 18.5 8.5 16.5"/><line x1="13" y1="6.5" x2="21" y2="6.5"/><line x1="13" y1="17.5" x2="21" y2="17.5"/></svg>
+  <span class="unplanned-badge" id="todo_badge" style="display:none;">0</span>
+</button>
 <div class="notes-panel" id="notes_panel">
   <div class="notes-panel-head">
     <span>Notizen</span>
@@ -735,8 +746,13 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-function freshBoard(){ const b = {}; DAYS.forEach(d=>b[d]=[]); b.unplanned = []; return b; }
-function ensureUnplanned(board){ if(!board.unplanned) board.unplanned = []; return board; }
+function freshBoard(){ const b = {}; DAYS.forEach(d=>b[d]=[]); b.unplanned = []; b.todos = []; return b; }
+function ensureUnplanned(board){ return ensureBuckets(board); }
+function ensureBuckets(board){
+  if(!board.unplanned) board.unplanned = [];
+  if(!board.todos) board.todos = [];
+  return board;
+}
 let boardCache = freshBoard();
 let boardLoaded = false;
 
@@ -1275,9 +1291,12 @@ function updateProgress(total, done){
   barEl.style.width = total === 0 ? '0%' : Math.round((done/total)*100) + '%';
 }
 function updateUnplannedBadge(){
-  const board = ensureUnplanned(getBoard());
-  const count = board.unplanned.length;
-  const badge = document.getElementById('unplanned_badge');
+  const board = ensureBuckets(getBoard());
+  updateBadge('unplanned_badge', board.unplanned.length);
+  updateBadge('todo_badge', board.todos.length);
+}
+function updateBadge(id, count){
+  const badge = document.getElementById(id);
   if(!badge) return;
   if(count > 0){
     badge.textContent = count > 99 ? '99+' : count;
@@ -1287,26 +1306,38 @@ function updateUnplannedBadge(){
   }
 }
 function openUnplannedModal(){
-  const board = ensureUnplanned(getBoard());
-  const items = board.unplanned.map((it, origIdx) => {
+  openBucketModal('unplanned', 'Zu verplanen',
+    {text:'Antippe das +, um einen Tag auszuwählen.', empty:'Nichts zu verplanen – alles erledigt oder eingeteilt.'}, false);
+}
+function openTodoModal(){
+  openBucketModal('todos', 'ToDo',
+    {text:'Sammle hier Aufgaben ohne festen Tag. Antippe das +, um einen Eintrag einzuplanen.', empty:'Noch keine ToDos gesammelt.'}, true);
+}
+function openBucketModal(bucketKey, title, hint, allowAdd){
+  const board = ensureBuckets(getBoard());
+  const items = (board[bucketKey] || []).map((it, origIdx) => {
     const obj = (typeof it === 'string') ? {text: it} : it;
     return Object.assign({}, obj, {origIdx});
   });
   const itemsHtml = items.length
-    ? items.map(obj => renderUnplannedRow(obj)).join('')
-    : '<p class="muted-note">Nichts zu verplanen – alles erledigt oder eingeteilt.</p>';
+    ? items.map(obj => renderBucketRow(obj, bucketKey)).join('')
+    : `<p class="muted-note">${hint.empty}</p>`;
   const clearBtn = items.length
-    ? `<button class="modal-delete" style="margin-top:14px;" onclick="clearAllUnplanned()">Alles löschen</button>`
+    ? `<button class="modal-delete" style="margin-top:14px;" onclick="clearAllBucket('${bucketKey}')">Alles löschen</button>`
+    : '';
+  const addBtn = allowAdd
+    ? `<button class="modal-submit" style="margin-bottom:14px;" onclick="openAddModal('${bucketKey}')">+ Neuer Eintrag</button>`
     : '';
 
   openModal(`
-    <h2>Zu verplanen</h2>
-    <p style="color:var(--text-dim); font-size:13px; margin:6px 0 16px;">Antippe das +, um einen Tag auszuwählen.</p>
-    <div id="unplanned_list">${itemsHtml}</div>
+    <h2>${title}</h2>
+    <p style="color:var(--text-dim); font-size:13px; margin:6px 0 16px;">${hint.text}</p>
+    ${addBtn}
+    <div id="bucket_list">${itemsHtml}</div>
     ${clearBtn}
   `);
 }
-function renderUnplannedRow(obj){
+function renderBucketRow(obj, bucketKey){
   const cat = catByKey(obj.category);
   const borderColor = cat ? `var(--${cat.color})` : 'var(--blue)';
   const timeLabel = obj.time ? `<span class="item-time">${obj.time}</span>` : '';
@@ -1317,38 +1348,39 @@ function renderUnplannedRow(obj){
   return `
     <div class="list-item unplanned-row" style="border-left-color:${borderColor}">
       ${prioDot}${recurLabel}${tplLabel}${timeLabel}${escapeHtml(displayText)}
-      <span class="unplanned-assign" onclick="openUnplannedDayPicker(${obj.origIdx})">+</span>
-      <span class="del" onclick="deleteUnplannedItem(${obj.origIdx})">✕</span>
+      <span class="unplanned-assign" onclick="openBucketDayPicker('${bucketKey}', ${obj.origIdx})">+</span>
+      <span class="del" onclick="deleteBucketItem('${bucketKey}', ${obj.origIdx})">✕</span>
     </div>
   `;
 }
-function openUnplannedDayPicker(idx){
+function openBucketDayPicker(bucketKey, idx){
   const dayChips = DAYS.map(d => `
-    <div class="day-chip" onclick="moveUnplannedToDay(${idx}, '${d}')">${d}</div>
+    <div class="day-chip" onclick="moveBucketItemToDay('${bucketKey}', ${idx}, '${d}')">${d}</div>
   `).join('');
+  const backFn = bucketKey === 'todos' ? 'openTodoModal' : 'openUnplannedModal';
   openModal(`
     <h2>Auf welchen Tag?</h2>
     <div class="day-chip-picker" style="margin-top:16px;">${dayChips}</div>
-    <button class="tpl-back" onclick="openUnplannedModal()">← Zurück</button>
+    <button class="tpl-back" onclick="${backFn}()">← Zurück</button>
   `);
 }
-function moveUnplannedToDay(idx, targetDay){
-  const board = ensureUnplanned(getBoard());
-  const [moved] = board.unplanned.splice(idx, 1);
+function moveBucketItemToDay(bucketKey, idx, targetDay){
+  const board = ensureBuckets(getBoard());
+  const [moved] = board[bucketKey].splice(idx, 1);
   board[targetDay] = board[targetDay] || [];
   insertSorted(board[targetDay], moved);
   saveBoard(board);
-  openUnplannedModal();
+  if(bucketKey === 'todos') openTodoModal(); else openUnplannedModal();
 }
-function deleteUnplannedItem(idx){
-  const board = ensureUnplanned(getBoard());
-  board.unplanned.splice(idx, 1);
+function deleteBucketItem(bucketKey, idx){
+  const board = ensureBuckets(getBoard());
+  board[bucketKey].splice(idx, 1);
   saveBoard(board);
-  openUnplannedModal();
+  if(bucketKey === 'todos') openTodoModal(); else openUnplannedModal();
 }
-function clearAllUnplanned(){
-  const board = ensureUnplanned(getBoard());
-  board.unplanned = [];
+function clearAllBucket(bucketKey){
+  const board = ensureBuckets(getBoard());
+  board[bucketKey] = [];
   saveBoard(board);
   closeModal();
 }
@@ -1516,7 +1548,9 @@ let modalSelectedTemplate = null;
 
 const REPEAT_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>`;
 
-function openAddModal(){
+let modalTargetBucket = null;
+function openAddModal(targetBucket){
+  modalTargetBucket = targetBucket || null;
   modalSelectedDays = [DAYS[dowIndex()]];
   modalSelectedCategory = CATEGORIES[0].key;
   modalSelectedPriority = null;
@@ -1543,6 +1577,14 @@ function openAddModal(){
     ? `<p class="tpl-info">Vorlage: ${escapeHtml(modalSelectedTemplate.name)} (Schritt 1/${modalSelectedTemplate.steps.length})</p>`
     : '';
 
+  const daySection = modalTargetBucket
+    ? `<p class="tpl-info">Wird in ${modalTargetBucket === 'todos' ? '"ToDo"' : '"Zu verplanen"'} gesammelt – Tag wählst du später.</p>`
+    : `
+    <div class="modal-field">
+      <label>Tag(e) – mehrere möglich</label>
+      <div class="day-chip-picker" id="modal_day_picker">${dayChips}</div>
+    </div>`;
+
   openModal(`
     <button class="tpl-corner-btn" title="Vorlagen" onclick="openTemplatesModal()">${REPEAT_ICON_SVG}</button>
     <h2>Neuer Eintrag</h2>
@@ -1551,10 +1593,7 @@ function openAddModal(){
       <label>Was steht an?</label>
       <input type="text" class="modal-input" id="modal_text" placeholder="z.B. Pflanzen gießen">
     </div>
-    <div class="modal-field">
-      <label>Tag(e) – mehrere möglich</label>
-      <div class="day-chip-picker" id="modal_day_picker">${dayChips}</div>
-    </div>
+    ${daySection}
     <div class="modal-field">
       <label>Uhrzeit (optional)</label>
       <input type="time" class="modal-input" id="modal_time">
@@ -1754,10 +1793,29 @@ function submitAddModal(){
   const durationEl = document.getElementById('modal_duration');
   const recurEl = document.getElementById('modal_recurring');
   const text = textEl.value.trim();
-  if(!text || modalSelectedDays.length === 0) return;
+  if(!text) return;
   const time = timeEl.value || '';
   const duration = durationEl && durationEl.value ? parseInt(durationEl.value, 10) : null;
   const recurring = recurEl.checked;
+
+  if(modalTargetBucket){
+    const newItem = {text, time, category: modalSelectedCategory, recurring, priority: modalSelectedPriority, period: modalSelectedPeriod, done: false};
+    if(duration) newItem.duration = duration;
+    if(modalSelectedTemplate){
+      newItem.templateId = modalSelectedTemplate.id;
+      newItem.stepIndex = 0;
+    }
+    const board = ensureBuckets(getBoard());
+    board[modalTargetBucket].push(newItem);
+    saveBoard(board);
+    const bucket = modalTargetBucket;
+    modalTargetBucket = null;
+    closeModal();
+    if(bucket === 'todos') openTodoModal(); else openUnplannedModal();
+    return;
+  }
+
+  if(modalSelectedDays.length === 0) return;
   const board = getBoard();
   modalSelectedDays.forEach(day => {
     const newItem = {text, time, category: modalSelectedCategory, recurring, priority: modalSelectedPriority, period: modalSelectedPeriod, done: false};
