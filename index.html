@@ -397,6 +397,15 @@
     content:''; flex:1; height:1px; background:var(--now-color); opacity:0.5;
   }
   .no-group-items{ display:flex; flex-direction:column; gap:5px; margin-top:4px; }
+  .routine-bar{
+    display:flex; align-items:center; gap:5px; margin-top:6px; padding:6px 8px;
+    background:var(--card-hi); border-radius:8px; cursor:pointer; font-size:10.5px; font-weight:700;
+    color:var(--text-dim); opacity:0.85;
+  }
+  .routine-bar:hover{ opacity:1; }
+  .routine-bar-icon{ font-size:10px; }
+  .routine-bar-arrow{ margin-left:auto; font-size:9px; }
+  .routine-expanded{ display:flex; flex-direction:column; gap:5px; margin-top:5px; }
   .time-group-label{
     font-size:9px; font-weight:700; color:var(--text-dim); text-transform:uppercase;
     letter-spacing:0.06em; margin:4px 2px 3px 2px; opacity:0.65;
@@ -736,7 +745,6 @@ const CATEGORIES = [
   {key:'termine', label:'Termine', color:'sky'},
   {key:'pause', label:'Pause', color:'teal'},
   {key:'projekte', label:'Projekte', color:'pink'},
-  {key:'routine', label:'Routine', color:'purple'},
   {key:'sonstiges', label:'Sonstiges', color:'grey'}
 ];
 function catByKey(key){ return CATEGORIES.find(c=>c.key===key) || null; }
@@ -1185,6 +1193,11 @@ setInterval(loadWeather, 15 * 60 * 1000);
 
 /* ================= Wochenboard ================= */
 let dragSrc = null;
+let routineExpandedDays = {};
+function toggleRoutineExpand(day){
+  routineExpandedDays[day] = !routineExpandedDays[day];
+  renderBoard();
+}
 
 const TIME_GROUPS = [
   {key:'morgens', label:'Morgens', from:5, to:12, always:true},
@@ -1215,10 +1228,14 @@ function renderBoard(){
 
   const html = DAYS.map((day, i) => {
     const rawItems = board[day] || [];
-    const items = rawItems.map((it, origIdx) => {
+    const allItems = rawItems.map((it, origIdx) => {
       const obj = (typeof it === 'string') ? {text: it} : it;
       return Object.assign({}, obj, {origIdx});
     });
+
+    const isFuture = i > todayIdx;
+    const routineItems = isFuture ? allItems.filter(it => it.routine) : [];
+    const items = isFuture ? allItems.filter(it => !it.routine) : allItems;
 
     let sectionsHtml = '';
     TIME_GROUPS.forEach(g => {
@@ -1261,6 +1278,19 @@ function renderBoard(){
     const noGroupItems = items.filter(it => !getEffectiveGroup(it));
     if(noGroupItems.length > 0){
       sectionsHtml += `<div class="no-group-items">${noGroupItems.map(obj => renderItemHtml(obj, day)).join('')}</div>`;
+    }
+
+    if(routineItems.length > 0){
+      const expanded = !!routineExpandedDays[day];
+      sectionsHtml += `
+        <div class="routine-bar" onclick="toggleRoutineExpand('${day}')">
+          <span class="routine-bar-icon">🔄</span> ${routineItems.length} Routine${routineItems.length > 1 ? 'n' : ''}
+          <span class="routine-bar-arrow">${expanded ? '▲' : '▼'}</span>
+        </div>
+      `;
+      if(expanded){
+        sectionsHtml += `<div class="routine-expanded">${routineItems.map(obj => renderItemHtml(obj, day)).join('')}</div>`;
+      }
     }
 
     const dayRelClass = i === todayIdx ? 'today' : (i < todayIdx ? 'day-past' : 'day-future');
@@ -1631,6 +1661,9 @@ function openAddModal(targetBucket){
     <div class="modal-field">
       <label class="recur-toggle"><input type="checkbox" id="modal_recurring"> Wiederkehrend (nur Symbol, ändert das Verhalten aktuell nicht)</label>
     </div>
+    <div class="modal-field">
+      <label class="recur-toggle"><input type="checkbox" id="modal_routine"> Routine (tägliche Muss-Sache – wird an kommenden Tagen minimiert angezeigt)</label>
+    </div>
     <button class="modal-submit" onclick="submitAddModal()">Hinzufügen</button>
   `);
   setTimeout(() => { const el = document.getElementById('modal_text'); if(el) el.focus(); }, 50);
@@ -1875,14 +1908,16 @@ function submitAddModal(){
   const timeEl = document.getElementById('modal_time');
   const durationEl = document.getElementById('modal_duration');
   const recurEl = document.getElementById('modal_recurring');
+  const routineEl = document.getElementById('modal_routine');
   const text = textEl.value.trim();
   if(!text) return;
   const time = timeEl.value || '';
   const duration = durationEl && durationEl.value ? parseInt(durationEl.value, 10) : null;
   const recurring = recurEl.checked;
+  const routine = routineEl ? routineEl.checked : false;
 
   if(modalTargetBucket){
-    const newItem = {text, time, category: modalSelectedCategory, recurring, priority: modalSelectedPriority, period: modalSelectedPeriod, done: false};
+    const newItem = {text, time, category: modalSelectedCategory, recurring, routine, priority: modalSelectedPriority, period: modalSelectedPeriod, done: false};
     if(duration) newItem.duration = duration;
     if(modalSelectedTemplate){
       newItem.templateId = modalSelectedTemplate.id;
@@ -1901,7 +1936,7 @@ function submitAddModal(){
   if(modalSelectedDays.length === 0) return;
   const board = getBoard();
   modalSelectedDays.forEach(day => {
-    const newItem = {text, time, category: modalSelectedCategory, recurring, priority: modalSelectedPriority, period: modalSelectedPeriod, done: false};
+    const newItem = {text, time, category: modalSelectedCategory, recurring, routine, priority: modalSelectedPriority, period: modalSelectedPeriod, done: false};
     if(duration) newItem.duration = duration;
     if(modalSelectedTemplate){
       newItem.templateId = modalSelectedTemplate.id;
@@ -1978,6 +2013,9 @@ function openEditModal(day, idx){
     <div class="modal-field">
       <label class="recur-toggle"><input type="checkbox" id="modal_recurring" ${item.recurring ? 'checked' : ''}> Wiederkehrend (nur Symbol, ändert das Verhalten aktuell nicht)</label>
     </div>
+    <div class="modal-field">
+      <label class="recur-toggle"><input type="checkbox" id="modal_routine" ${item.routine ? 'checked' : ''}> Routine (tägliche Muss-Sache – wird an kommenden Tagen minimiert angezeigt)</label>
+    </div>
     <button class="modal-submit" onclick="submitEditModal()">Speichern</button>
     <button class="modal-delete" onclick="deleteFromEditModal()">Löschen</button>
   `);
@@ -2006,6 +2044,7 @@ function submitEditModal(){
     priority: modalSelectedPriority,
     period: modalSelectedPeriod,
     recurring: recurEl.checked,
+    routine: document.getElementById('modal_routine') ? document.getElementById('modal_routine').checked : false,
     done
   };
   if(durationEl && durationEl.value) updated.duration = parseInt(durationEl.value, 10);
