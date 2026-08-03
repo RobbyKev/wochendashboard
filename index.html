@@ -300,6 +300,17 @@
   }
   .tpl-corner-btn:hover{ filter:brightness(1.1); }
   .tpl-corner-btn svg{ width:16px; height:16px; }
+  .import-corner-btn{
+    position:absolute; top:16px; right:100px; width:32px; height:32px; border-radius:50%;
+    background:var(--sky); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    color:#0d0f22;
+  }
+  .import-corner-btn:hover{ filter:brightness(1.1); }
+  .import-corner-btn svg{ width:16px; height:16px; }
+  .import-textarea{
+    width:100%; min-height:220px; font-size:13px; padding:11px 12px; background:var(--bg); color:var(--text);
+    border:1px solid var(--line); border-radius:10px; font-family:'Inter', sans-serif; resize:vertical;
+  }
 
   /* Layout */
   .layout{ padding:8px 24px 28px; }
@@ -1587,6 +1598,9 @@ function openAddModal(targetBucket){
 
   openModal(`
     <button class="tpl-corner-btn" title="Vorlagen" onclick="openTemplatesModal()">${REPEAT_ICON_SVG}</button>
+    <button class="import-corner-btn" title="Aus Kalender importieren" onclick="openImportModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M12 14v4M10 16h4"/></svg>
+    </button>
     <h2>Neuer Eintrag</h2>
     ${tplInfo}
     <div class="modal-field">
@@ -1653,6 +1667,75 @@ function pickModalTemplate(id){
 }
 
 /* ================= Vorlagen-Verwaltung (eigenes Fenster) ================= */
+/* ================= Kalender-Text-Import ================= */
+function openImportModal(){
+  openModal(`
+    <h2>Aus Kalender importieren</h2>
+    <p style="color:var(--text-dim); font-size:13px; margin:6px 0 16px;">
+      Kopiere Termine aus Apple Kalender (Titel + "Geplant: TT.MM.JJJJ, HH:MM bis HH:MM") und füge sie hier ein.
+      Mehrere Termine funktionieren gleichzeitig. Achtung: Nur eine Woche gleichzeitig – bei mehreren Kalenderwochen
+      landen unterschiedliche Wochen auf demselben Wochentag-Platz.
+    </p>
+    <textarea class="import-textarea" id="import_text" placeholder="Text hier einfügen..."></textarea>
+    <button class="modal-submit" onclick="runImport()">Importieren</button>
+  `);
+}
+function parseImportText(text){
+  const blocks = text.split(/\n\s*\n/).map(b => b.trim()).filter(b => b);
+  const results = [];
+  blocks.forEach(block => {
+    const lines = block.split('\n').map(l => l.trim()).filter(l => l);
+    if(lines.length < 2) return;
+    const title = lines[0];
+    const planLine = lines.find(l => l.startsWith('Geplant:'));
+    if(!planLine) return;
+    const m = planLine.match(/Geplant:\s*(\d{2})\.(\d{2})\.(\d{4})(?:,\s*(\d{2}):(\d{2})\s*bis\s*(\d{2}):(\d{2}))?/);
+    if(!m) return;
+    const [, dd, mm, yyyy, sh, sm, eh, em] = m;
+    const dateObj = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
+    const dayIdx = (dateObj.getDay() + 6) % 7;
+    const day = DAYS[dayIdx];
+    let time = '', duration = null;
+    if(sh !== undefined){
+      time = `${sh}:${sm}`;
+      const startMin = parseInt(sh) * 60 + parseInt(sm);
+      const endMin = parseInt(eh) * 60 + parseInt(em);
+      duration = endMin - startMin;
+      if(duration <= 0) duration = null;
+    }
+    results.push({ title, day, time, duration, dateLabel: `${dd}.${mm}.${yyyy}` });
+  });
+  return results;
+}
+function runImport(){
+  const text = document.getElementById('import_text').value;
+  const parsed = parseImportText(text);
+  if(parsed.length === 0){
+    openModal(`
+      <h2>Aus Kalender importieren</h2>
+      <p style="color:#ff6b6b; font-size:13px; margin:6px 0 16px;">Konnte keine Termine im eingefügten Text erkennen. Format prüfen und nochmal versuchen.</p>
+      <button class="tpl-back" onclick="openImportModal()">← Zurück</button>
+    `);
+    return;
+  }
+  const board = getBoard();
+  parsed.forEach(p => {
+    const newItem = { text: p.title, time: p.time, category: 'termine', priority: null, period: null, recurring: false, done: false };
+    if(p.duration) newItem.duration = p.duration;
+    insertSorted(board[p.day], newItem);
+  });
+  saveBoard(board);
+
+  const summary = parsed.map(p => `<li>${escapeHtml(p.title)} – ${p.day} (${p.dateLabel})${p.time ? ' um ' + p.time : ''}</li>`).join('');
+  openModal(`
+    <h2>Importiert</h2>
+    <p style="color:var(--teal); font-size:13px; margin:6px 0 12px;">${parsed.length} Termin(e) übernommen:</p>
+    <ul style="font-size:13px; color:var(--text-dim); padding-left:18px; line-height:1.7;">${summary}</ul>
+    <button class="modal-submit" style="margin-top:16px;" onclick="closeModal()">Fertig</button>
+  `);
+  renderBoard();
+}
+
 function openTemplatesModal(){
   renderTemplatesListModal();
 }
