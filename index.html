@@ -365,7 +365,14 @@
     display:grid; grid-template-columns:repeat(7,1fr); gap:6px;
   }
   @media (max-width: 720px){
-    .board-grid{ grid-template-columns:repeat(2,1fr); }
+    .board-grid{
+      display:flex; grid-template-columns:none; overflow-x:auto; gap:0;
+      scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;
+    }
+    .board-grid .day-col{
+      flex:0 0 100%; scroll-snap-align:start; scroll-snap-stop:always;
+      margin:0 2px; transform:none !important;
+    }
   }
   .day-col{
     background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:8px 6px;
