@@ -382,6 +382,15 @@
       flex:0 0 100%; scroll-snap-align:start; scroll-snap-stop:always;
       margin:0 2px; transform:none !important;
     }
+    .weather-desc, .weather-meta{ display:none; }
+    .weather-tile{ padding:8px 14px; gap:10px; }
+    .progress-tile{ display:none; }
+    .header{
+      display:flex; flex-wrap:wrap; justify-content:space-between; padding:14px 14px 10px; gap:8px;
+    }
+    .header-left{ order:1; }
+    .header-actions{ order:2; flex:1 1 auto; justify-content:center; }
+    .header-right{ order:3; }
   }
   .day-col{
     background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:8px 6px;
