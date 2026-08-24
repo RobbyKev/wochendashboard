@@ -1437,6 +1437,19 @@ function deleteBucketItem(bucketKey, idx){
 }
 function clearAllBucket(bucketKey){
   const board = ensureBuckets(getBoard());
+  const count = (board[bucketKey] || []).length;
+  const label = bucketKey === 'todos' ? 'ToDo-Liste' : '"Zu verplanen"-Liste';
+  openModal(`
+    <h2>Wirklich alles löschen?</h2>
+    <p style="color:var(--text-dim); font-size:14px; margin:10px 0 20px;">
+      ${count} Eintrag${count === 1 ? '' : 'e'} aus der ${label} werden unwiderruflich gelöscht. Das lässt sich nicht rückgängig machen.
+    </p>
+    <button class="modal-delete" onclick="confirmClearAllBucket('${bucketKey}')">Ja, alles löschen</button>
+    <button class="tpl-back" onclick="${bucketKey === 'todos' ? 'openTodoModal' : 'openUnplannedModal'}()">← Abbrechen</button>
+  `);
+}
+function confirmClearAllBucket(bucketKey){
+  const board = ensureBuckets(getBoard());
   board[bucketKey] = [];
   saveBoard(board);
   closeModal();
