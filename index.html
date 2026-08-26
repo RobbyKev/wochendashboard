@@ -316,6 +316,17 @@
   }
   .import-corner-btn:hover{ filter:brightness(1.1); }
   .import-corner-btn svg{ width:16px; height:16px; }
+  .quick-corner-btn{
+    position:absolute; top:16px; right:140px; width:32px; height:32px; border-radius:50%;
+    background:var(--teal); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    color:#062b24;
+  }
+  .quick-corner-btn:hover{ filter:brightness(1.1); }
+  .quick-corner-btn svg{ width:16px; height:16px; }
+  .quick-add-textarea{
+    width:100%; min-height:200px; font-size:14px; padding:11px 12px; background:var(--bg); color:var(--text);
+    border:1px solid var(--line); border-radius:10px; font-family:'Inter', sans-serif; resize:vertical;
+  }
   .import-textarea{
     width:100%; min-height:220px; font-size:13px; padding:11px 12px; background:var(--bg); color:var(--text);
     border:1px solid var(--line); border-radius:10px; font-family:'Inter', sans-serif; resize:vertical;
@@ -1669,6 +1680,9 @@ function openAddModal(targetBucket){
     <button class="import-corner-btn" title="Aus Kalender importieren" onclick="openImportModal()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M12 14v4M10 16h4"/></svg>
     </button>
+    <button class="quick-corner-btn" title="Schnell einfügen" onclick="openQuickAddModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="14" y2="17"/></svg>
+    </button>
     <h2>Neuer Eintrag</h2>
     ${tplInfo}
     <div class="modal-field">
@@ -1739,6 +1753,37 @@ function pickModalTemplate(id){
 
 /* ================= Vorlagen-Verwaltung (eigenes Fenster) ================= */
 /* ================= Kalender-Text-Import ================= */
+/* ================= Schnell einfügen ================= */
+function openQuickAddModal(){
+  const todayKey = DAYS[dowIndex()];
+  openModal(`
+    <h2>Schnell einfügen</h2>
+    <p style="color:var(--text-dim); font-size:13px; margin:6px 0 16px;">
+      Eine Zeile = ein Eintrag. Alles landet ohne Uhrzeit und ohne Kategorie auf dem heutigen Tag (${todayKey}).
+    </p>
+    <textarea class="quick-add-textarea" id="quick_add_text" placeholder="Mangold ernten
+Möhren ernten
+Wäsche
+..."></textarea>
+    <button class="modal-submit" onclick="runQuickAdd()">Hinzufügen</button>
+  `);
+  setTimeout(() => { const el = document.getElementById('quick_add_text'); if(el) el.focus(); }, 50);
+}
+function runQuickAdd(){
+  const text = document.getElementById('quick_add_text').value;
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  if(lines.length === 0){ closeModal(); return; }
+
+  const todayKey = DAYS[dowIndex()];
+  const board = getBoard();
+  lines.forEach(line => {
+    board[todayKey].push({ text: line, time: '', category: null, priority: null, period: null, recurring: false, routine: false, done: false });
+  });
+  saveBoard(board);
+  closeModal();
+  renderBoard();
+}
+
 function openImportModal(){
   openModal(`
     <h2>Aus Kalender importieren</h2>
