@@ -852,16 +852,26 @@ function checkWeekRollover(){
 
   let changed = false;
   DAYS.forEach(day => {
-    const items = board[day] || [];
-    const stillOpen = items.filter(it => {
-      const obj = (typeof it === 'string') ? {text: it} : it;
-      return !obj.done;
+    const rawItems = board[day] || [];
+    if(rawItems.length === 0) return;
+    const items = rawItems.map(it => (typeof it === 'string') ? {text: it} : it);
+
+    const keepInPlace = [];
+    const toUnplanned = [];
+    items.forEach(obj => {
+      if(obj.routine || obj.recurring){
+        const resetObj = Object.assign({}, obj, { done: false });
+        if(resetObj.templateId) resetObj.stepIndex = 0;
+        keepInPlace.push(resetObj);
+      } else if(!obj.done){
+        toUnplanned.push(obj);
+      }
+      // erledigte, nicht-wiederkehrende Einträge fallen einfach weg
     });
-    if(items.length > 0){
-      changed = true;
-      board.unplanned = board.unplanned.concat(stillOpen);
-      board[day] = [];
-    }
+
+    changed = true;
+    board.unplanned = board.unplanned.concat(toUnplanned);
+    board[day] = keepInPlace;
   });
   board.weekKey = currentMonday;
   saveBoard(board);
