@@ -466,6 +466,17 @@
   .prio-dot.high{ background:#ff6b6b; }
   .prio-dot.medium{ background:#ffd93d; }
   .prio-dot.low{ background:#6bcb77; }
+  .person-badge{
+    display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px;
+    border-radius:50%; font-size:9px; font-weight:800; margin-right:5px; vertical-align:middle;
+    color:#0d0f22;
+  }
+  .person-filter{ display:flex; gap:6px; margin-bottom:14px; }
+  .person-filter-btn{
+    background:var(--bg); border:1px solid var(--line); color:var(--text-dim); font-size:12.5px; font-weight:700;
+    padding:8px 14px; border-radius:9px; cursor:pointer; display:flex; align-items:center; gap:5px;
+  }
+  .person-filter-btn.active{ background:var(--card-hi); border-color:var(--blue); color:var(--text); }
 
   /* Fortschritt */
   .progress-tile{
@@ -704,6 +715,7 @@
       <button class="view-toggle-btn active" id="view_list_btn" onclick="switchBoardView('list')">Liste</button>
       <button class="view-toggle-btn" id="view_tl_btn" onclick="switchBoardView('timeline')">Zeitplan</button>
     </div>
+    <div class="person-filter" id="person_filter"></div>
     <div class="board-grid" id="board_grid"></div>
     <div class="tl-view" id="tl_view" style="display:none;">
       <div class="tl-day-tabs" id="tl_day_tabs"></div>
@@ -1271,13 +1283,17 @@ function renderBoard(){
   const todayKey = DAYS[todayIdx];
   const nowStr = new Date().toTimeString().slice(0,5);
   const currentPeriod = getTimeGroup(nowStr);
+  renderPersonFilter();
 
   const html = DAYS.map((day, i) => {
     const rawItems = board[day] || [];
-    const allItems = rawItems.map((it, origIdx) => {
+    const allItemsRaw = rawItems.map((it, origIdx) => {
       const obj = (typeof it === 'string') ? {text: it} : it;
       return Object.assign({}, obj, {origIdx});
     });
+    const allItems = personFilter === 'alle'
+      ? allItemsRaw
+      : allItemsRaw.filter(it => !it.person || it.person === personFilter);
 
     const isFuture = i > todayIdx;
     const routineItems = isFuture ? allItems.filter(it => it.routine) : [];
@@ -1431,10 +1447,11 @@ function renderBucketRow(obj, bucketKey){
   const recurLabel = obj.recurring ? `<span class="recur-icon">🔁</span>` : '';
   const prioDot = obj.priority ? `<span class="prio-dot ${obj.priority}"></span>` : '';
   const tplLabel = obj.templateId ? `<span class="tpl-icon">${REPEAT_ICON_SVG}</span>` : '';
+  const personLabel = personBadgeHtml(obj);
   const displayText = getDisplayText(obj);
   return `
     <div class="list-item unplanned-row" style="border-left-color:${borderColor}">
-      ${prioDot}${recurLabel}${tplLabel}${timeLabel}${escapeHtml(displayText)}
+      ${prioDot}${personLabel}${recurLabel}${tplLabel}${timeLabel}${escapeHtml(displayText)}
       <span class="unplanned-assign" onclick="openBucketDayPicker('${bucketKey}', ${obj.origIdx})">+</span>
       <span class="del" onclick="deleteBucketItem('${bucketKey}', ${obj.origIdx})">✕</span>
     </div>
@@ -1503,6 +1520,7 @@ function renderItemHtml(obj, day){
   const recurLabel = obj.recurring ? `<span class="recur-icon">🔁</span>` : '';
   const prioDot = obj.priority ? `<span class="prio-dot ${obj.priority}"></span>` : '';
   const tplLabel = obj.templateId ? `<span class="tpl-icon">${REPEAT_ICON_SVG}</span>` : '';
+  const personLabel = personBadgeHtml(obj);
   const eff = getEffectiveGroup(obj);
   const effKey = eff ? eff.key : '';
   const displayText = getDisplayText(obj);
@@ -1516,7 +1534,7 @@ function renderItemHtml(obj, day){
       ondragstart="onDragStart(event)" ondragend="onDragEnd(event)"
       ondragover="onItemDragOver(event)" ondrop="onItemDrop(event, '${day}', ${obj.origIdx}, '${effKey}')"
       onclick="handleItemTap(event, '${day}', ${obj.origIdx})">
-      ${prioDot}${recurLabel}${tplLabel}${timeLabel}${escapeHtml(displayText)}<span class="del" onclick="event.stopPropagation(); openEditModal('${day}', ${obj.origIdx})">✎</span>
+      ${prioDot}${personLabel}${recurLabel}${tplLabel}${timeLabel}${escapeHtml(displayText)}<span class="del" onclick="event.stopPropagation(); openEditModal('${day}', ${obj.origIdx})">✎</span>
     </div>
   `;
 }
@@ -1638,11 +1656,22 @@ let modalSelectedDays = [];
 let modalSelectedCategory = CATEGORIES[0].key;
 let modalSelectedPriority = null;
 let modalSelectedPeriod = null;
+let modalSelectedPerson = null;
 const PRIORITIES = [
   {key:'high', label:'Hoch'},
   {key:'medium', label:'Mittel'},
   {key:'low', label:'Niedrig'}
 ];
+const PEOPLE = [
+  {key:'uli', label:'Uli', color:'blue'},
+  {key:'kevin', label:'Kevin', color:'amber'}
+];
+function personBadgeHtml(obj){
+  if(!obj.person) return '';
+  const p = PEOPLE.find(x => x.key === obj.person);
+  if(!p) return '';
+  return `<span class="person-badge" style="background:var(--${p.color});" title="${p.label}">${p.label[0]}</span>`;
+}
 
 let modalSelectedTemplate = null;
 
@@ -1656,6 +1685,7 @@ function openAddModal(targetBucket){
   modalSelectedPriority = null;
   modalSelectedPeriod = null;
   modalSelectedTemplate = null;
+  modalSelectedPerson = null;
 
   const dayChips = DAYS.map(d => `
     <div class="day-chip ${modalSelectedDays.includes(d) ? 'selected' : ''}" data-day="${d}" onclick="toggleModalDay('${d}', this)">${d}</div>
@@ -1669,6 +1699,9 @@ function openAddModal(targetBucket){
     <div class="prio-chip" data-key="${p.key}" onclick="pickModalPriority('${p.key}', this)">
       <span class="prio-dot ${p.key}"></span>${p.label}
     </div>
+  `).join('');
+  const personChips = PEOPLE.map(p => `
+    <div class="day-chip" data-key="${p.key}" onclick="pickModalPerson('${p.key}', this)">${p.label}</div>
   `).join('');
   const periodChips = TIME_GROUPS.filter(g => g.always).map(g => `
     <div class="day-chip" data-key="${g.key}" onclick="pickModalPeriod('${g.key}', this)">${g.label}</div>
@@ -1721,6 +1754,10 @@ function openAddModal(targetBucket){
       <div class="prio-picker" id="modal_prio_picker">${prioChips}</div>
     </div>
     <div class="modal-field">
+      <label>Für wen? (optional, sonst für alle)</label>
+      <div class="day-chip-picker" id="modal_person_picker">${personChips}</div>
+    </div>
+    <div class="modal-field">
       <label class="recur-toggle"><input type="checkbox" id="modal_recurring"> Wiederkehrend (nur Symbol, ändert das Verhalten aktuell nicht)</label>
     </div>
     <div class="modal-field">
@@ -1737,6 +1774,16 @@ function pickModalPeriod(key, el){
   } else {
     modalSelectedPeriod = key;
     document.querySelectorAll('#modal_period_picker .day-chip').forEach(chip => chip.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+}
+function pickModalPerson(key, el){
+  if(modalSelectedPerson === key){
+    modalSelectedPerson = null;
+    el.classList.remove('selected');
+  } else {
+    modalSelectedPerson = key;
+    document.querySelectorAll('#modal_person_picker .day-chip').forEach(chip => chip.classList.remove('selected'));
     el.classList.add('selected');
   }
 }
@@ -2010,7 +2057,7 @@ function submitAddModal(){
   const routine = routineEl ? routineEl.checked : false;
 
   if(modalTargetBucket){
-    const newItem = {text, time, category: modalSelectedCategory, recurring, routine, priority: modalSelectedPriority, period: modalSelectedPeriod, done: false};
+    const newItem = {text, time, category: modalSelectedCategory, recurring, routine, priority: modalSelectedPriority, period: modalSelectedPeriod, person: modalSelectedPerson, done: false};
     if(duration) newItem.duration = duration;
     if(modalSelectedTemplate){
       newItem.templateId = modalSelectedTemplate.id;
@@ -2029,7 +2076,7 @@ function submitAddModal(){
   if(modalSelectedDays.length === 0) return;
   const board = getBoard();
   modalSelectedDays.forEach(day => {
-    const newItem = {text, time, category: modalSelectedCategory, recurring, routine, priority: modalSelectedPriority, period: modalSelectedPeriod, done: false};
+    const newItem = {text, time, category: modalSelectedCategory, recurring, routine, priority: modalSelectedPriority, period: modalSelectedPeriod, person: modalSelectedPerson, done: false};
     if(duration) newItem.duration = duration;
     if(modalSelectedTemplate){
       newItem.templateId = modalSelectedTemplate.id;
@@ -2055,6 +2102,7 @@ function openEditModal(day, idx){
   modalSelectedCategory = item.category || CATEGORIES[0].key;
   modalSelectedPriority = item.priority || null;
   modalSelectedPeriod = item.period || null;
+  modalSelectedPerson = item.person || null;
 
   const tpl = item.templateId ? templatesCache.find(t => t.id === item.templateId) : null;
   const displayText = getDisplayText(item);
@@ -2074,6 +2122,9 @@ function openEditModal(day, idx){
   `).join('');
   const periodChips = TIME_GROUPS.filter(g => g.always).map(g => `
     <div class="day-chip ${g.key === modalSelectedPeriod ? 'selected' : ''}" data-key="${g.key}" onclick="pickModalPeriod('${g.key}', this)">${g.label}</div>
+  `).join('');
+  const personChips = PEOPLE.map(p => `
+    <div class="day-chip ${p.key === modalSelectedPerson ? 'selected' : ''}" data-key="${p.key}" onclick="pickModalPerson('${p.key}', this)">${p.label}</div>
   `).join('');
 
   openModal(`
@@ -2102,6 +2153,10 @@ function openEditModal(day, idx){
     <div class="modal-field">
       <label>Dringlichkeit (optional)</label>
       <div class="prio-picker" id="modal_prio_picker">${prioChips}</div>
+    </div>
+    <div class="modal-field">
+      <label>Für wen? (optional, sonst für alle)</label>
+      <div class="day-chip-picker" id="modal_person_picker">${personChips}</div>
     </div>
     <div class="modal-field">
       <label class="recur-toggle"><input type="checkbox" id="modal_recurring" ${item.recurring ? 'checked' : ''}> Wiederkehrend (nur Symbol, ändert das Verhalten aktuell nicht)</label>
@@ -2136,6 +2191,7 @@ function submitEditModal(){
     category: modalSelectedCategory,
     priority: modalSelectedPriority,
     period: modalSelectedPeriod,
+    person: modalSelectedPerson,
     recurring: recurEl.checked,
     routine: document.getElementById('modal_routine') ? document.getElementById('modal_routine').checked : false,
     done
@@ -2359,6 +2415,22 @@ const TL_END = 23;
 const TL_PPH = 56; // Pixel pro Stunde
 let boardViewMode = 'list';
 let currentTlDay = null;
+let personFilter = 'alle';
+function renderPersonFilter(){
+  const el = document.getElementById('person_filter');
+  if(!el) return;
+  const allBtn = `<button class="person-filter-btn ${personFilter === 'alle' ? 'active' : ''}" onclick="setPersonFilter('alle')">Alle</button>`;
+  const peopleBtns = PEOPLE.map(p => `
+    <button class="person-filter-btn ${personFilter === p.key ? 'active' : ''}" onclick="setPersonFilter('${p.key}')">
+      <span class="person-badge" style="background:var(--${p.color});">${p.label[0]}</span>${p.label}
+    </button>
+  `).join('');
+  el.innerHTML = allBtn + peopleBtns;
+}
+function setPersonFilter(key){
+  personFilter = key;
+  renderBoard();
+}
 
 function timeToMinutes(t){
   if(!t) return null;
