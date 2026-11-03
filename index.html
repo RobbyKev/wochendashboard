@@ -370,6 +370,7 @@
   .home-btn{ display:flex; align-items:center; gap:4px; }
   .home-btn svg{ width:15px; height:15px; }
   .view-title{ font-size:18px; font-weight:800; align-self:center; margin-left:8px; }
+  #todo_layout .view-toggle{ align-items:center; }
   .todo-wrap{ max-width:780px; margin:0 auto; }
   .todo-section{ margin-bottom:24px; }
   .todo-section-head{
@@ -830,6 +831,7 @@
     <div class="view-toggle">
       <button class="view-toggle-btn home-btn" onclick="showView('start')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Start</button>
       <span class="view-title">Erledigungen</span>
+      <button class="add-fab" style="margin-left:auto;" onclick="openTodoAddModal()" aria-label="Neue Erledigung">+</button>
     </div>
     <div class="person-filter"></div>
     <div class="todo-wrap" id="todo_content"></div>
@@ -2781,6 +2783,50 @@ function renderTodoRow(obj, day, showDay, past){
 function toggleTodoDone(){
   todoDoneExpanded = !todoDoneExpanded;
   renderTodoView();
+}
+function openTodoAddModal(){
+  modalTargetBucket = null;
+  modalSelectedDays = [DAYS[dowIndex()]];
+  modalSelectedPerson = null;
+  const dayChips = DAYS.map(d => `
+    <div class="day-chip ${modalSelectedDays.includes(d) ? 'selected' : ''}" data-day="${d}" onclick="toggleModalDay('${d}', this)">${d}</div>
+  `).join('');
+  const personChips = PEOPLE.map(p => `
+    <div class="day-chip" data-key="${p.key}" onclick="pickModalPerson('${p.key}', this)">${p.label}</div>
+  `).join('');
+  openModal(`
+    <h2>Neue Erledigung</h2>
+    <div class="modal-field">
+      <label>Was steht an?</label>
+      <input type="text" class="modal-input" id="todo_add_text" placeholder="z.B. Anwalt anrufen" onkeydown="if(event.key==='Enter') submitTodoAdd()">
+    </div>
+    <div class="modal-field">
+      <label>Für wen? (optional, sonst für alle)</label>
+      <div class="day-chip-picker" id="modal_person_picker">${personChips}</div>
+    </div>
+    <div class="modal-field">
+      <label>Tag(e) – heute ist vorausgewählt</label>
+      <div class="day-chip-picker" id="modal_day_picker">${dayChips}</div>
+    </div>
+    <div class="modal-field">
+      <label class="recur-toggle"><input type="checkbox" id="todo_add_important"> Wichtig (Dringlichkeit Hoch)</label>
+    </div>
+    <button class="modal-submit" onclick="submitTodoAdd()">Hinzufügen</button>
+  `);
+  setTimeout(() => { const el = document.getElementById('todo_add_text'); if(el) el.focus(); }, 50);
+}
+function submitTodoAdd(){
+  const text = document.getElementById('todo_add_text').value.trim();
+  if(!text || modalSelectedDays.length === 0) return;
+  const important = document.getElementById('todo_add_important').checked;
+  const board = getBoard();
+  modalSelectedDays.forEach(day => {
+    board[day].push({ text, time: '', category: null, priority: important ? 'high' : null, period: null,
+      person: modalSelectedPerson, recurring: false, routine: false, done: false });
+  });
+  saveBoard(board);
+  closeModal();
+  renderBoard();
 }
 function renderTodoView(){
   const el = document.getElementById('todo_content');
