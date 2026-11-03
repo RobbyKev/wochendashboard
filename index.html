@@ -406,6 +406,14 @@
   .todo-daychip.overdue{ color:#ff6b6b; }
   .todo-edit{ color:var(--text-dim); cursor:pointer; padding:6px; font-size:15px; }
   .todo-empty{ color:var(--text-dim); font-size:14px; padding:6px 2px 4px; }
+  /* In Erledigungen steht nur die Aufgabenliste – kein Wetter, keine Uhr, keine Knöpfe */
+  body[data-view="todo"] .header,
+  body[data-view="todo"] #postit_layer,
+  body[data-view="todo"] .postit-fab,
+  body[data-view="todo"] .notes-fab,
+  body[data-view="todo"] .todo-fab,
+  body[data-view="todo"] .notes-panel{ display:none !important; }
+  body[data-view="todo"] #todo_layout{ padding-top:20px; }
 
   /* Wochenboard */
   .view-toggle{ display:flex; gap:8px; margin-bottom:14px; }
@@ -742,7 +750,7 @@
   }
 </style>
 </head>
-<body>
+<body data-view="start">
 
 <div class="header">
   <div class="header-left">
@@ -907,6 +915,8 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+// verhindert, dass ein versehentlich undefiniertes Feld das komplette Speichern abbricht
+db.settings({ ignoreUndefinedProperties: true });
 
 function freshBoard(){ const b = {}; DAYS.forEach(d=>b[d]=[]); b.unplanned = []; b.todos = []; return b; }
 function ensureUnplanned(board){ return ensureBuckets(board); }
@@ -1029,7 +1039,7 @@ function tickClock(){
   });
   lastFlipDigits = digits;
 }
-setInterval(tickClock, 15000); tickClock();
+setInterval(tickClock, 1000); tickClock();
 
 /* ================= Vollbild-Uhr / Timer ================= */
 function openFullscreenClock(){
@@ -1049,6 +1059,7 @@ function switchFsTab(tab){
 
 let timerInterval = null;
 let timerSecondsLeft = 0;
+let timerEndAt = 0;
 let audioCtx = null;
 function unlockAudio(){
   if(!audioCtx){
@@ -1106,9 +1117,11 @@ function startTimer(){
   document.getElementById('timer_setup').style.display = 'none';
   document.getElementById('timer_start_btn').textContent = 'Pause';
   document.getElementById('timer_start_btn').onclick = pauseTimer;
+  // gegen eine feste Endzeit rechnen – setInterval läuft im Hintergrund/bei Display-Sperre nicht zuverlässig
+  timerEndAt = Date.now() + timerSecondsLeft * 1000;
   timerInterval = setInterval(() => {
-    timerSecondsLeft--;
-    document.getElementById('timer_display').textContent = formatTimer(Math.max(timerSecondsLeft,0));
+    timerSecondsLeft = Math.max(0, Math.ceil((timerEndAt - Date.now()) / 1000));
+    document.getElementById('timer_display').textContent = formatTimer(timerSecondsLeft);
     if(timerSecondsLeft <= 0){
       clearInterval(timerInterval);
       timerInterval = null;
@@ -1117,7 +1130,7 @@ function startTimer(){
       document.getElementById('timer_start_btn').onclick = startTimer;
       playBeep();
     }
-  }, 1000);
+  }, 250);
   document.getElementById('timer_display').textContent = formatTimer(timerSecondsLeft);
 }
 function pauseTimer(){
@@ -1186,8 +1199,11 @@ const HAREN_LAT = 52.7925, HAREN_LON = 7.2439;
 let weatherData = null;
 function weatherDesc(code){
   const map = {0:"Klar",1:"Meist klar",2:"Teilw. bewölkt",3:"Stark bewölkt",45:"Nebel",48:"Nebel",
-    51:"Nieselregen",61:"Regen",63:"Regen",65:"Starker Regen",71:"Schnee",73:"Schnee",
-    80:"Schauer",81:"Schauer",95:"Gewitter"};
+    51:"Nieselregen",53:"Nieselregen",55:"Nieselregen",56:"Gefr. Niesel",57:"Gefr. Niesel",
+    61:"Regen",63:"Regen",65:"Starker Regen",66:"Gefr. Regen",67:"Gefr. Regen",
+    71:"Schnee",73:"Schnee",75:"Starker Schnee",77:"Schneegriesel",
+    80:"Schauer",81:"Schauer",82:"Starke Schauer",85:"Schneeschauer",86:"Schneeschauer",
+    95:"Gewitter",96:"Gewitter/Hagel",99:"Gewitter/Hagel"};
   return map[code] || "—";
 }
 function windArrow(deg){
@@ -1196,7 +1212,8 @@ function windArrow(deg){
 }
 async function loadWeather(){
   try{
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${HAREN_LAT}&longitude=${HAREN_LON}&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,wind_direction_10m,precipitation_probability&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,weather_code,sunset&minutely_15=precipitation&timezone=Europe%2FBerlin`);
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${HAREN_LAT}&longitude=${HAREN_LON}&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,wind_direction_10m,precipitation_probability&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,weather_code,sunset,precipitation_probability_max&minutely_15=precipitation&timezone=Europe%2FBerlin`);
+    if(!r.ok) throw new Error('HTTP ' + r.status);
     weatherData = await r.json();
     renderWeatherTile();
   }catch(e){
@@ -1239,10 +1256,10 @@ function weatherIconType(code){
   if(code === 2) return 'cloudy';
   if(code === 3) return 'cloudy';
   if(code === 45 || code === 48) return 'cloudy';
-  if([51,61,80].includes(code)) return 'sun-shower';
-  if([63,65,81].includes(code)) return 'rainy';
-  if([71,73].includes(code)) return 'flurries';
-  if(code === 95) return 'thunder-storm';
+  if([51,53,55,61,80].includes(code)) return 'sun-shower';
+  if([56,57,63,65,66,67,81,82].includes(code)) return 'rainy';
+  if([71,73,75,77,85,86].includes(code)) return 'flurries';
+  if([95,96,99].includes(code)) return 'thunder-storm';
   return 'cloudy';
 }
 function animatedWeatherIcon(code){
@@ -1271,8 +1288,10 @@ function weatherIcon(code){
 function openWeatherView(){
   if(!weatherData){ loadWeather(); return; }
   const now = new Date();
-  const nowIso = now.toISOString().slice(0,13);
-  let startIdx = weatherData.hourly.time.findIndex(t => t.startsWith(nowIso));
+  // Open-Meteo liefert Ortszeit (Europe/Berlin), toISOString() wäre UTC -> 1-2 Stunden daneben
+  const pad = n => String(n).padStart(2, '0');
+  const nowKey = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}`;
+  let startIdx = weatherData.hourly.time.findIndex(t => t.startsWith(nowKey));
   if(startIdx < 0) startIdx = 0;
   const hourly = weatherData.hourly.time.slice(startIdx, startIdx+8).map((t,i)=>{
     const idx = startIdx + i;
@@ -1284,12 +1303,14 @@ function openWeatherView(){
 
   const allTemps = weatherData.daily.temperature_2m_max.concat(weatherData.daily.temperature_2m_min);
   const globalMax = Math.max(...allTemps), globalMin = Math.min(...allTemps);
+  const tempRange = (globalMax - globalMin) || 1;
   const daily = weatherData.daily.time.slice(0,7).map((t,i)=>{
-    const dayName = new Date(t).toLocaleDateString('de-DE',{weekday:'short'});
+    // 'YYYY-MM-DD' würde als UTC gelesen – mit Uhrzeit wird es lokal interpretiert
+    const dayName = new Date(t + 'T12:00').toLocaleDateString('de-DE',{weekday:'short'});
     const tmax = Math.round(weatherData.daily.temperature_2m_max[i]);
     const tmin = Math.round(weatherData.daily.temperature_2m_min[i]);
-    const leftPct = ((tmin - globalMin) / (globalMax - globalMin)) * 100;
-    const widthPct = ((tmax - tmin) / (globalMax - globalMin)) * 100;
+    const leftPct = ((tmin - globalMin) / tempRange) * 100;
+    const widthPct = ((tmax - tmin) / tempRange) * 100;
     const gradient = `linear-gradient(to right, ${tempToColor(tmin)}, ${tempToColor(tmax)})`;
     const pop = weatherData.daily.precipitation_probability_max ? weatherData.daily.precipitation_probability_max[i] : 0;
     const popLabel = pop > 15 ? `<div class="daily-pop">💧${pop}%</div>` : '';
@@ -1402,7 +1423,7 @@ function renderBoard(){
       });
       if(!g.always && inGroup.length === 0) return;
 
-      const timed = inGroup.filter(it => it.time);
+      const timed = inGroup.filter(it => it.time).sort((a, b) => a.time.localeCompare(b.time));
       const untimed = inGroup.filter(it => !it.time);
 
       let timedHtml = '';
@@ -1674,9 +1695,10 @@ function toggleDone(day, idx){
   renderBoard();
 }
 function escapeHtml(str){
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  // auch Anführungszeichen maskieren, sonst bricht z.B. value="..." im Bearbeiten-Dialog ab
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 let draggingFromUnplanned = false;
@@ -2347,15 +2369,23 @@ function toggleNotesPanel(){
   }
 }
 function onNotesInput(){
-  notesFocused = true;
   const value = document.getElementById('notes_textarea').value;
   clearTimeout(notesSaveTimer);
   notesSaveTimer = setTimeout(() => {
+    notesSaveTimer = null;
     notesCache = value;
     db.collection('wochendashboard').doc('notes').set({ text: value }).catch(e => console.error('Speichern fehlgeschlagen:', e));
-    notesFocused = false;
   }, 600);
 }
+// solange getippt wird, keine Fremd-Updates ins Textfeld schreiben (sonst springt der Cursor / Text geht verloren)
+(function(){
+  const ta = document.getElementById('notes_textarea');
+  ta.addEventListener('focus', () => { notesFocused = true; });
+  ta.addEventListener('blur', () => {
+    notesFocused = false;
+    if(!notesSaveTimer) ta.value = notesCache;
+  });
+})();
 
 function addPostIt(){
   const list = getPostIts();
@@ -2543,7 +2573,8 @@ function switchBoardView(view){
   boardViewMode = view;
   document.getElementById('view_list_btn').classList.toggle('active', view === 'list');
   document.getElementById('view_tl_btn').classList.toggle('active', view === 'timeline');
-  document.getElementById('board_grid').style.display = view === 'list' ? 'grid' : 'none';
+  // '' statt 'grid', damit am Handy das Wisch-Layout (display:flex aus dem CSS) erhalten bleibt
+  document.getElementById('board_grid').style.display = view === 'list' ? '' : 'none';
   document.getElementById('tl_view').style.display = view === 'timeline' ? 'block' : 'none';
   if(view === 'timeline'){
     if(!currentTlDay) currentTlDay = DAYS[dowIndex()];
@@ -2684,6 +2715,7 @@ let todoDoneExpanded = false;
 
 function showView(v){
   appView = v;
+  document.body.dataset.view = v;
   document.getElementById('start_screen').classList.toggle('hidden', v !== 'start');
   document.getElementById('week_layout').style.display = v === 'week' ? 'block' : 'none';
   document.getElementById('todo_layout').style.display = v === 'todo' ? 'block' : 'none';
@@ -2795,6 +2827,19 @@ function renderTodoView(){
     </div>
   `;
 }
+
+/* ================= Laufende Aktualisierung ================= */
+// Ohne das bleibt bei dauerhaft offenem Board (z.B. Tablet an der Wand) nach Mitternacht
+// der alte Tag markiert, die Jetzt-Linie steht still und der Wochenwechsel passiert erst beim nächsten Sync.
+function refreshBoard(){
+  if(!boardLoaded || dragSrc || tlDrag) return; // nicht mitten in einem Drag neu zeichnen
+  checkWeekRollover();
+  renderBoard();
+}
+setInterval(refreshBoard, 60 * 1000);
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden){ refreshBoard(); loadWeather(); }
+});
 
 /* ================= Start ================= */
 renderBoard();
